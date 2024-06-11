@@ -3,7 +3,6 @@
 #include "Starter.hpp"
 #define RENDER_DISTANCE 40
 #define NUM_OF_TILES 16
-#define NUM_OF_OBST_PER_TILE 2
 
 // The uniform buffer objects data structures
 // Remember to use the correct alignas(...) value
@@ -47,7 +46,7 @@ Tile tile[NUM_OF_TILES];
 Tile beach[NUM_OF_TILES * 2];
 
 std::string beachModel;
-Obstacle obstacle[NUM_OF_TILES][NUM_OF_OBST_PER_TILE];
+Obstacle obstacle[NUM_OF_TILES];
 
 // MAIN !
 class MeshLoader : public BaseProject
@@ -71,12 +70,12 @@ protected:
 	Model<Vertex> M1, M2, M3; // M4
 	Model<Vertex> MTiles[NUM_OF_TILES];
 	Model<Vertex> MBeach[NUM_OF_TILES * 2];
-	Model<Vertex> MObstacles[NUM_OF_TILES][NUM_OF_OBST_PER_TILE];
+	Model<Vertex> MObstacles[NUM_OF_TILES];
 	// Descriptor sets
 	DescriptorSet DS1, DS2, DS3; // DS4;
 	DescriptorSet DSTiles[NUM_OF_TILES];
 	DescriptorSet DSBeach[NUM_OF_TILES * 2];
-	DescriptorSet DSObstacles[NUM_OF_TILES][NUM_OF_OBST_PER_TILE];
+	DescriptorSet DSObstacles[NUM_OF_TILES];
 	// Textures
 	Texture /*T1,*/ T2;
 	Texture TDungeon;
@@ -104,7 +103,7 @@ protected:
 		Ar = (float)windowWidth / (float)windowHeight;
 	}
 
-	// What to do when the window changes size
+	// What to do when the window changes size - don't remove this for now 
 	void onWindowResize(int w, int h) {
 		Ar = (float)w / (float)h;
 	}
@@ -174,15 +173,13 @@ protected:
 		M3.init(this, &VD, "models/Cube.obj", OBJ);
 
 		for (int i = 0; i < NUM_OF_TILES; i++) {
-			MTiles[i].init(this, &VD, "models/road_tile_2x2_005.mgcg", MGCG);
-			for (int j=0; j < NUM_OF_OBST_PER_TILE; j++){
-				MObstacles[i][j].init(this, &VD, "models/prop.050_Mesh.7300.mgcg", MGCG);
-			}
+			MTiles[i].init(this, &VD, "models/road_tile_2x2_005.mgcg", MGCG); // init Roadtiles 
+			MObstacles[i].init(this, &VD, "models/box_005.mgcg", MGCG); // init Obstacles
 		}
 		
 		//do the same for beach tiles
 		for (int i = 0; i < NUM_OF_TILES * 2; i++) {
-			//choose a random beach tile
+			//choose a random beach tile this allows for random order of tiles with every run of the game
 			int random = rand() % 4 + 4;
 			beachModel = "models/beach_tile_1x1_00" + std::to_string(random) + ".mgcg";
 			MBeach[i].init(this, &VD, beachModel, MGCG);
@@ -202,11 +199,13 @@ protected:
 
 		// Init local variables
 
-		// Initialize Positions of Tiles
+		// Initial Positions of Roadtiles and Obstacles
 		for(int i = 0; i < NUM_OF_TILES; i++){
 			tile[i].pos.z = i * 16;
+			obstacle[i].pos.z = i * 16;
+			obstacle[i].pos.x = rand() % 8 - 4;
 		}
-
+		// Initial Positions of Beachtiles
 		for (int i = 0; i < NUM_OF_TILES * 2; i++) {
 			beach[i].pos.z = i * 8;
 		}
@@ -241,9 +240,13 @@ protected:
         }
 
 		// do the same for beach tiles
-		for (DescriptorSet& DSBeach : DSBeach) {
+		for (DescriptorSet &DSBeach : DSBeach) {
 			DSBeach.init(this, &DSL, {{0, UNIFORM, sizeof(UniformBlock), nullptr}, {1, TEXTURE, 0, &T2}});
 		}
+		for (DescriptorSet &DSObstacles : DSObstacles) {
+			DSObstacles.init(this, &DSL, {{0, UNIFORM, sizeof(UniformBlock), nullptr}, {1, TEXTURE, 0, &T2}});
+		}
+		
 	}
 
 	// Here you destroy your pipelines and Descriptor Sets!
@@ -261,8 +264,11 @@ protected:
 		for (DescriptorSet &DSTiles: DSTiles) {
             DSTiles.cleanup();
         }
-		for (DescriptorSet& DSBeach : DSBeach) {
+		for (DescriptorSet &DSBeach : DSBeach) {
 			DSBeach.cleanup();
+		}
+		for (DescriptorSet &DSObstacles : DSObstacles) {
+			DSObstacles.cleanup();
 		}
 	}
 
@@ -287,6 +293,9 @@ protected:
 		//beach cleanup
 		for (Model<Vertex> &MBeach : MBeach) {
 			MBeach.cleanup();
+		}
+		for (Model<Vertex> &MObstacles : MObstacles) {
+			MObstacles.cleanup();
 		}
 
 		// Cleanup descriptor set layouts
@@ -338,14 +347,24 @@ protected:
 		//  M4.bind(commandBuffer);
 		//  vkCmdDrawIndexed(commandBuffer,
 		//  		static_cast<uint32_t>(M4.indices.size()), 1, 0, 0, 0);
+
+		// Bind Dataset, Model and record drawing command in command buffer
 		for (int i = 0; i < NUM_OF_TILES; i++){
+			// Roadtiles
 			MTiles[i].bind(commandBuffer);
 			DSTiles[i].bind(commandBuffer, P, 0, currentImage);
 			vkCmdDrawIndexed(commandBuffer,
 						 static_cast<uint32_t>(MTiles[i].indices.size()), 1, 0, 0, 0);
+			// Obstacles
+			MObstacles[i].bind(commandBuffer);
+			DSObstacles[i].bind(commandBuffer, P, 0, currentImage);
+			vkCmdDrawIndexed(commandBuffer,
+						 static_cast<uint32_t>(MObstacles[i].indices.size()), 1, 0, 0, 0);
 		}
 
+		// Bind Dataset, Model and record drawing command in command buffer
 		for (int i = 0; i < NUM_OF_TILES * 2; i++) {
+			// Beachtiles
 			MBeach[i].bind(commandBuffer);
 			DSBeach[i].bind(commandBuffer, P, 0, currentImage);
 			vkCmdDrawIndexed(commandBuffer,
@@ -379,15 +398,8 @@ protected:
 		// If fills the last boolean variable with true if fire has been pressed:
 		//          SPACE on the keyboard, A or B button on the Gamepad, Right mouse button
 
-		// M3.initMesh(this, &VD);
-		// T2.init(this, "textures/Textures_City.png");
 
-		// Controls
-		car.pos.z += m.z * 0.8f;
-		car.pos.x += (int)m.x * 0.4f;
-		car.pos.x = glm::clamp(car.pos.x, -4.0f, 4.0f);
-
-		// Parameters
+		// Setup camera and matrices for model view projection matrix 
 		// Camera FOV-y, Near Plane and Far Plane
 		const float FOVy = glm::radians(60.0f);
 		const float nearPlane = 0.1f;
@@ -398,11 +410,18 @@ protected:
 		glm::vec3 camTarget = glm::vec3(0, 0, car.pos.z);
 		glm::vec3 camPos = camTarget + glm::vec3(0, 5, -20) / 2.0f; 
 		// glm::vec3 camPos = camTarget + glm::vec3(0, 50, -80) / 2.0f; //debugging cam
-		glm::mat4 View = glm::lookAt(camPos, camTarget, glm::vec3(0, 1, 0));
 
+		glm::mat4 View = glm::lookAt(camPos, camTarget, glm::vec3(0, 1, 0));
 		glm::mat4 World;
 
-		// Car
+
+		// Controls
+		// car.pos.z += glm::abs(m.z) * 0.8f; // allow only forward movement UNCOMMENT WHEN COLLISION DETECTION IS IMPLEMENTED
+		car.pos.z += m.z * 0.8f; // until COLLISION DETECTION is implemented we allow backwards driving for testing 
+		car.pos.x += (int)m.x * 0.4f;
+		car.pos.x = glm::clamp(car.pos.x, -4.0f, 4.0f); // keep the car on the road
+
+		// translate car movement
 		World = glm::translate(glm::mat4(1), glm::vec3(-car.pos.x, 0, car.pos.z));
 		ubo2.mvpMat = Prj * View * World;
 		DS2.map(currentImage, &ubo2, sizeof(ubo2), 0);
@@ -419,9 +438,9 @@ protected:
 		glm::mat4 World_Tiles [NUM_OF_TILES];
 		for (int i = 0; i < NUM_OF_TILES ; i++){
 			if (tile[i].pos.z + 16 < car.pos.z) {
-				tile[i].pos.z = tile[i].pos.z + (NUM_OF_TILES - 1) * 16;
+				tile[i].pos.z = tile[i].pos.z + (NUM_OF_TILES) * 16;
 			} 
-			World_Tiles[i] = glm::scale(glm::mat4(1), glm::vec3(1.0f)) * glm::translate(glm::mat4(1), glm::vec3(0, 0, tile[i].pos.z)) *
+			World_Tiles[i] = glm::translate(glm::mat4(1), glm::vec3(0, 0, tile[i].pos.z)) *
 				glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0, 1, 0));
 			ubo3.mvpMat = Prj * View * World_Tiles[i];
 			DSTiles[i].map(currentImage, &ubo3, sizeof(ubo3), 0);
@@ -431,28 +450,32 @@ protected:
         glm::mat4 World_Beach[NUM_OF_TILES * 2];
 		for (int i = 0; i < NUM_OF_TILES * 2; i++) {
 			if (beach[i].pos.z + 8 < car.pos.z) {
-				beach[i].pos.z = beach[i].pos.z + (NUM_OF_TILES * 2 - 1) * 8;
+				beach[i].pos.z = beach[i].pos.z + (NUM_OF_TILES * 2) * 8;
 			}
-			World_Beach[i] = glm::scale(glm::mat4(1), glm::vec3(1.0f)) * glm::translate(glm::mat4(1), glm::vec3(12, 0, beach[i].pos.z)) *
+			World_Beach[i] = glm::translate(glm::mat4(1), glm::vec3(12, 0, beach[i].pos.z)) *
 				glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0, 1, 0));
 			ubo1.mvpMat = Prj * View * World_Beach[i];
 			DSBeach[i].map(currentImage, &ubo1, sizeof(ubo1), 0);
 		}
 
-		// UNCOMMENT BELOW IT WORKS!
-		// if (tile.pos.z + 10 < car.pos.z)
-		// {
-		// 	// move the road
-		// 	// std::cout << "TILE BEHIND CAR \n";
-		// 	std::cout << "CAR POS " << car.pos.z << "\n";
-		// 	std::cout << "TILE POS " << tile.pos.z << "\n";
-		// 	tile.pos.z = car.pos.z + 5;
-		// }
-		World = glm::scale(glm::mat4(1), glm::vec3(1.0f)) * glm::translate(glm::mat4(1), glm::vec3(0, 0, 20)) *
+		// Obstacle Generation 
+		glm::mat4 World_Obstacles[NUM_OF_TILES];
+		for (int i = 0; i < NUM_OF_TILES ; i++){
+			if (obstacle[i].pos.z + 16 < car.pos.z) {
+				obstacle[i].pos.z = obstacle[i].pos.z + (NUM_OF_TILES) * 16;
+				obstacle[i].pos.x = rand() % 8 - 4; // random x position
+			} 
+			World_Obstacles[i] = glm::translate(glm::mat4(1), glm::vec3(obstacle[i].pos.x, 0, obstacle[i].pos.z)) *
 				glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0, 1, 0));
-		ubo3.mvpMat = Prj * View * World;
+			ubo3.mvpMat = Prj * View * World_Obstacles[i];
+			DSObstacles[i].map(currentImage, &ubo3, sizeof(ubo3), 0);
+		}
 
-		DS3.map(currentImage, &ubo3, sizeof(ubo3), 0);
+		// World = glm::scale(glm::mat4(1), glm::vec3(1.0f)) * glm::translate(glm::mat4(1), glm::vec3(0, 0, 20)) *
+		// 		glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0, 1, 0));
+		// ubo3.mvpMat = Prj * View * World;
+
+		// DS3.map(currentImage, &ubo3, sizeof(ubo3), 0);
 
 	}
 };
