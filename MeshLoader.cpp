@@ -2,7 +2,7 @@
 
 #include "Starter.hpp"
 #define RENDER_DISTANCE 40
-#define NUM_OF_TILES 8
+#define NUM_OF_TILES 16
 
 // The uniform buffer objects data structures
 // Remember to use the correct alignas(...) value
@@ -84,9 +84,9 @@ protected:
 		initialBackgroundColor = {0.0f, 0.005f, 0.01f, 1.0f};
 
 		// Descriptor pool sizes
-		uniformBlocksInPool = 20;
-		texturesInPool = 20;
-		setsInPool = 20;
+		uniformBlocksInPool = 30;
+		texturesInPool = 30;
+		setsInPool = 30;
 
 		Ar = (float)windowWidth / (float)windowHeight;
 	}
@@ -176,6 +176,9 @@ protected:
 		T2.init(this, "textures/Textures_City.png");
 
 		// Init local variables
+		for(int i = 0; i < NUM_OF_TILES; i++){
+			tile[i].pos.z = i * 16;
+		}
 	}
 
 	// Here you create your pipelines and Descriptor Sets!
@@ -341,7 +344,8 @@ protected:
 		glm::mat4 Prj = glm::perspective(FOVy, Ar, nearPlane, farPlane);
 		Prj[1][1] *= -1;
 		glm::vec3 camTarget = glm::vec3(0, 0, car.pos.z);
-		glm::vec3 camPos = camTarget + glm::vec3(0, 5, -20) / 2.0f;
+		glm::vec3 camPos = camTarget + glm::vec3(0, 5, -20) / 2.0f; 
+		// glm::vec3 camPos = camTarget + glm::vec3(0, 50, -80) / 2.0f; //debugging cam
 		glm::mat4 View = glm::lookAt(camPos, camTarget, glm::vec3(0, 1, 0));
 
 		glm::mat4 World;
@@ -365,14 +369,13 @@ protected:
 		// DS2.map(currentImage, &ubo2, sizeof(ubo2), 0);
 
 		// Road
-		// TILE SIZE 8 x 8
+		// TILE SIZE 16 x 16
 		glm::mat4 World_Tiles [NUM_OF_TILES];
 		for (int i = 0; i < NUM_OF_TILES ; i++){
-			if (tile[i].pos.z + 8 < car.pos.z) {
-				std::cout << "IN";
-				tile[i].pos.z = car.pos.z + (NUM_OF_TILES) + 5;
-			}
-			World_Tiles[i] = glm::scale(glm::mat4(1), glm::vec3(1.0f)) * glm::translate(glm::mat4(1), glm::vec3(0, 0, tile[i].pos.z + i * 16.0f)) *
+			if (tile[i].pos.z + 16 < car.pos.z) {
+				tile[i].pos.z = tile[i].pos.z + (NUM_OF_TILES - 1) * 16;
+			} 
+			World_Tiles[i] = glm::scale(glm::mat4(1), glm::vec3(1.0f)) * glm::translate(glm::mat4(1), glm::vec3(0, 0, tile[i].pos.z)) *
 				glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0, 1, 0));
 			ubo3.mvpMat = Prj * View * World_Tiles[i];
 			DSTiles[i].map(currentImage, &ubo3, sizeof(ubo3), 0);
