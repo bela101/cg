@@ -163,7 +163,7 @@ protected:
 		// M2.init(this,   &VD, "Models/Sphere.gltf", GLTF);
 		M2.init(this, &VD, "models/transport_sport_001_transport_sport_001.001.mgcg", MGCG);
 		// M3.init(this,   &VD, "Models/dish.005_Mesh.098.mgcg", MGCG);
-		M3.init(this, &VD, "models/road_tile_2x2_005.mgcg", MGCG);
+		M3.init(this, &VD, "models/Cube.obj", OBJ);
 
 		for (int i = 0; i < NUM_OF_TILES; i++) {
 			MTiles[i].init(this, &VD, "models/road_tile_2x2_005.mgcg", MGCG);
@@ -189,6 +189,8 @@ protected:
 		T2.init(this, "textures/Textures_City.png");
 
 		// Init local variables
+
+		// Initialize Positions of Tiles
 		for(int i = 0; i < NUM_OF_TILES; i++){
 			tile[i].pos.z = i * 16;
 		}
@@ -400,7 +402,7 @@ protected:
 		// ubo2.mvpMat = Prj * View * World;
 		// DS2.map(currentImage, &ubo2, sizeof(ubo2), 0);
 
-		// Road
+		// Road Generation
 		// TILE SIZE 16 x 16
 		glm::mat4 World_Tiles [NUM_OF_TILES];
 		for (int i = 0; i < NUM_OF_TILES ; i++){
@@ -434,11 +436,11 @@ protected:
 		// 	std::cout << "TILE POS " << tile.pos.z << "\n";
 		// 	tile.pos.z = car.pos.z + 5;
 		// }
-		// World = glm::scale(glm::mat4(1), glm::vec3(1.0f)) * glm::translate(glm::mat4(1), glm::vec3(0, 0, tile.pos.z)) *
-		// 		glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0, 1, 0));
-		// ubo3.mvpMat = Prj * View * World;
+		World = glm::scale(glm::mat4(1), glm::vec3(1.0f)) * glm::translate(glm::mat4(1), glm::vec3(0, 0, 20)) *
+				glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0, 1, 0));
+		ubo3.mvpMat = Prj * View * World;
 
-		// DS3.map(currentImage, &ubo3, sizeof(ubo3), 0);
+		DS3.map(currentImage, &ubo3, sizeof(ubo3), 0);
 
 	}
 };
