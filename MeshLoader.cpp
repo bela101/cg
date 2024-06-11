@@ -1,7 +1,8 @@
 // This has been adapted from the Vulkan tutorial
 
 #include "Starter.hpp"
-#define RENDER_DISTANCE 20
+#define RENDER_DISTANCE 40
+#define NUM_OF_TILES 8
 
 // The uniform buffer objects data structures
 // Remember to use the correct alignas(...) value
@@ -38,7 +39,7 @@ struct Tile
 };
 
 Car car;
-Tile tile;
+Tile tile[NUM_OF_TILES];
 
 // MAIN !
 class MeshLoader : public BaseProject
@@ -60,8 +61,10 @@ protected:
 	// Please note that Model objects depends on the corresponding vertex structure
 	// Models
 	Model<Vertex> M1, M2, M3; // M4
+	Model<Vertex> MTiles[NUM_OF_TILES];
 	// Descriptor sets
 	DescriptorSet DS1, DS2, DS3; // DS4;
+	DescriptorSet DSTiles[NUM_OF_TILES];
 	// Textures
 	Texture /*T1,*/ T2;
 
@@ -81,16 +84,15 @@ protected:
 		initialBackgroundColor = {0.0f, 0.005f, 0.01f, 1.0f};
 
 		// Descriptor pool sizes
-		uniformBlocksInPool = 3;
-		texturesInPool = 4;
-		setsInPool = 3;
+		uniformBlocksInPool = 20;
+		texturesInPool = 20;
+		setsInPool = 20;
 
 		Ar = (float)windowWidth / (float)windowHeight;
 	}
 
 	// What to do when the window changes size
-	void onWindowResize(int w, int h)
-	{
+	void onWindowResize(int w, int h) {
 		Ar = (float)w / (float)h;
 	}
 
@@ -158,6 +160,10 @@ protected:
 		// M3.init(this,   &VD, "Models/dish.005_Mesh.098.mgcg", MGCG);
 		M3.init(this, &VD, "models/road_tile_2x2_005.mgcg", MGCG);
 
+		for (int i = 0; i < NUM_OF_TILES; i++) {
+			MTiles[i].init(this, &VD, "models/road_tile_2x2_005.mgcg", MGCG);
+		}
+
 		// Creates a mesh with direct enumeration of vertices and indices
 		// M4.vertices = {{{-6,-2,-6}, {0.0f,0.0f}}, {{-6,-2,6}, {0.0f,1.0f}},
 		// 			    {{6,-2,-6}, {1.0f,0.0f}}, {{ 6,-2,6}, {1.0f,1.0f}}};
@@ -195,6 +201,9 @@ protected:
 					{0, UNIFORM, sizeof(UniformBlock), nullptr},
 					{1, TEXTURE, 0, &T1}
 				});*/
+		for (DescriptorSet &DSTiles: DSTiles) {
+            DSTiles.init(this, &DSL, {{0, UNIFORM, sizeof(UniformBlock), nullptr}, {1, TEXTURE, 0, &T2}});
+        }
 	}
 
 	// Here you destroy your pipelines and Descriptor Sets!
@@ -209,6 +218,9 @@ protected:
 		DS2.cleanup();
 		DS3.cleanup();
 		// DS4.cleanup();
+		for (DescriptorSet &DSTiles: DSTiles) {
+            DSTiles.cleanup();
+        }
 	}
 
 	// Here you destroy all the Models, Texture and Desc. Set Layouts you created!
@@ -226,6 +238,9 @@ protected:
 		M2.cleanup();
 		M3.cleanup();
 		// M4.cleanup();
+		for (Model<Vertex> &MTiles: MTiles){
+			MTiles.cleanup();
+		}
 
 		// Cleanup descriptor set layouts
 		DSL.cleanup();
@@ -276,6 +291,12 @@ protected:
 		//  M4.bind(commandBuffer);
 		//  vkCmdDrawIndexed(commandBuffer,
 		//  		static_cast<uint32_t>(M4.indices.size()), 1, 0, 0, 0);
+		for (int i = 0; i < NUM_OF_TILES; i++){
+			MTiles[i].bind(commandBuffer);
+			DSTiles[i].bind(commandBuffer, P, 0, currentImage);
+			vkCmdDrawIndexed(commandBuffer,
+						 static_cast<uint32_t>(MTiles[i].indices.size()), 1, 0, 0, 0);
+		}
 	}
 
 	// Here is where you update the uniforms.
@@ -303,12 +324,14 @@ protected:
 		// If fills the last boolean variable with true if fire has been pressed:
 		//          SPACE on the keyboard, A or B button on the Gamepad, Right mouse button
 
-		M3.initMesh(this, &VD);
-		T2.init(this, "textures/Textures_City.png");
+		// M3.initMesh(this, &VD);
+		// T2.init(this, "textures/Textures_City.png");
 
+		// Controls
 		car.pos.z += m.z * 0.8f;
 		car.pos.x += (int)m.x * 0.4f;
 		car.pos.x = glm::clamp(car.pos.x, -4.0f, 4.0f);
+
 		// Parameters
 		// Camera FOV-y, Near Plane and Far Plane
 		const float FOVy = glm::radians(60.0f);
@@ -342,25 +365,34 @@ protected:
 		// DS2.map(currentImage, &ubo2, sizeof(ubo2), 0);
 
 		// Road
-		if (tile.pos.z < car.pos.z + RENDER_DISTANCE)
-		{
-			// move the road
-			tile.pos.z = car.pos.z;
-		}
-		ubo3.mvpMat = Prj * View * World;
-		World = glm::scale(glm::mat4(1), glm::vec3(1.0f)) * glm::translate(glm::mat4(1), glm::vec3(0, 0, tile.pos.z)) *
+		// TILE SIZE 8 x 8
+		glm::mat4 World_Tiles [NUM_OF_TILES];
+		for (int i = 0; i < NUM_OF_TILES ; i++){
+			if (tile[i].pos.z + 8 < car.pos.z) {
+				std::cout << "IN";
+				tile[i].pos.z = car.pos.z + (NUM_OF_TILES) + 5;
+			}
+			World_Tiles[i] = glm::scale(glm::mat4(1), glm::vec3(1.0f)) * glm::translate(glm::mat4(1), glm::vec3(0, 0, tile[i].pos.z + i * 16.0f)) *
 				glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0, 1, 0));
+			ubo3.mvpMat = Prj * View * World_Tiles[i];
+			DSTiles[i].map(currentImage, &ubo3, sizeof(ubo3), 0);
+		}
 
-		DS3.map(currentImage, &ubo3, sizeof(ubo3), 0);
+		// UNCOMMENT BELOW IT WORKS!
+		// if (tile.pos.z + 10 < car.pos.z)
+		// {
+		// 	// move the road
+		// 	// std::cout << "TILE BEHIND CAR \n";
+		// 	std::cout << "CAR POS " << car.pos.z << "\n";
+		// 	std::cout << "TILE POS " << tile.pos.z << "\n";
+		// 	tile.pos.z = car.pos.z + 5;
+		// }
+		// World = glm::scale(glm::mat4(1), glm::vec3(1.0f)) * glm::translate(glm::mat4(1), glm::vec3(0, 0, tile.pos.z)) *
+		// 		glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0, 1, 0));
+		// ubo3.mvpMat = Prj * View * World;
 
-		/*World = glm::translate(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f));
-		ubo2.mvpMat = Prj * View * World;
-		DS2.map(currentImage, &ubo3, sizeof(ubo2), 0);*/
+		// DS3.map(currentImage, &ubo3, sizeof(ubo3), 0);
 
-		/*World = glm::translate(glm::mat4(1), glm::vec3(0, 0, 0)) *
-				glm::scale(glm::mat4(1), glm::vec3(5.0f));
-		ubo4.mvpMat = Prj * View * World;
-		DS4.map(currentImage, &ubo4, sizeof(ubo4), 0);*/
 	}
 };
 
