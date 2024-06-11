@@ -1,6 +1,7 @@
 // This has been adapted from the Vulkan tutorial
 
 #include "Starter.hpp"
+#define RENDER_DISTANCE 20
 
 // The uniform buffer objects data structures
 // Remember to use the correct alignas(...) value
@@ -21,6 +22,7 @@ struct UniformBlock
 struct Vertex
 {
 	glm::vec3 pos;
+	glm::vec3 norm;
 	glm::vec2 UV;
 };
 
@@ -30,7 +32,13 @@ struct Car
 	float speed;
 };
 
+struct Tile
+{
+	glm::vec3 pos;
+};
+
 Car car;
+Tile tile;
 
 // MAIN !
 class MeshLoader : public BaseProject
@@ -295,11 +303,12 @@ protected:
 		// If fills the last boolean variable with true if fire has been pressed:
 		//          SPACE on the keyboard, A or B button on the Gamepad, Right mouse button
 
+		M3.initMesh(this, &VD);
+		T2.init(this, "textures/Textures_City.png");
 
-		car.pos.z += m.z;
-		car.pos.x += m.x;
-		car.pos.x = glm::clamp(car.pos.x, -1.0f, 1.0f);
-
+		car.pos.z += m.z * 0.8f;
+		car.pos.x += (int)m.x * 0.4f;
+		car.pos.x = glm::clamp(car.pos.x, -4.0f, 4.0f);
 		// Parameters
 		// Camera FOV-y, Near Plane and Far Plane
 		const float FOVy = glm::radians(60.0f);
@@ -314,11 +323,13 @@ protected:
 
 		glm::mat4 World;
 
+		// Beach
 		World = glm::translate(glm::mat4(1), glm::vec3(10, 0, 0)) *
 				glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0, 1, 0));
 		ubo1.mvpMat = Prj * View * World;
 		DS1.map(currentImage, &ubo1, sizeof(ubo1), 0);
-		
+
+		// Car
 		World = glm::translate(glm::mat4(1), glm::vec3(-car.pos.x, 0, car.pos.z));
 		ubo2.mvpMat = Prj * View * World;
 		DS2.map(currentImage, &ubo2, sizeof(ubo2), 0);
@@ -330,9 +341,16 @@ protected:
 		// ubo2.mvpMat = Prj * View * World;
 		// DS2.map(currentImage, &ubo2, sizeof(ubo2), 0);
 
-		World = glm::scale(glm::mat4(1), glm::vec3(1.0f)) * glm::translate(glm::mat4(1), glm::vec3(0, 0, 0)) *
-				glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0, 1, 0));
+		// Road
+		if (tile.pos.z < car.pos.z + RENDER_DISTANCE)
+		{
+			// move the road
+			tile.pos.z = car.pos.z;
+		}
 		ubo3.mvpMat = Prj * View * World;
+		World = glm::scale(glm::mat4(1), glm::vec3(1.0f)) * glm::translate(glm::mat4(1), glm::vec3(0, 0, tile.pos.z)) *
+				glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0, 1, 0));
+
 		DS3.map(currentImage, &ubo3, sizeof(ubo3), 0);
 
 		/*World = glm::translate(glm::mat4(1), glm::vec3(1.0f, 1.0f, 1.0f));
