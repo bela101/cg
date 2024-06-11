@@ -40,7 +40,7 @@ struct Tile
 };
 struct Obstacle {
 	glm::vec3 pos;
-}
+};
 
 Car car;
 Tile tile[NUM_OF_TILES];
@@ -244,8 +244,6 @@ protected:
 		for (DescriptorSet& DSBeach : DSBeach) {
 			DSBeach.init(this, &DSL, {{0, UNIFORM, sizeof(UniformBlock), nullptr}, {1, TEXTURE, 0, &T2}});
 		}
-        }
-		for 
 	}
 
 	// Here you destroy your pipelines and Descriptor Sets!
