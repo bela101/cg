@@ -3,6 +3,7 @@
 #include "Starter.hpp"
 #define RENDER_DISTANCE 40
 #define NUM_OF_TILES 16
+#define NUM_OF_OBST_PER_TILE 2
 
 // The uniform buffer objects data structures
 // Remember to use the correct alignas(...) value
@@ -37,12 +38,16 @@ struct Tile
 {
 	glm::vec3 pos;
 };
+struct Obstacle {
+	glm::vec3 pos;
+}
 
 Car car;
 Tile tile[NUM_OF_TILES];
 Tile beach[NUM_OF_TILES * 2];
 
 std::string beachModel;
+Obstacle obstacle[NUM_OF_TILES][NUM_OF_OBST_PER_TILE];
 
 // MAIN !
 class MeshLoader : public BaseProject
@@ -66,12 +71,15 @@ protected:
 	Model<Vertex> M1, M2, M3; // M4
 	Model<Vertex> MTiles[NUM_OF_TILES];
 	Model<Vertex> MBeach[NUM_OF_TILES * 2];
+	Model<Vertex> MObstacles[NUM_OF_TILES][NUM_OF_OBST_PER_TILE];
 	// Descriptor sets
 	DescriptorSet DS1, DS2, DS3; // DS4;
 	DescriptorSet DSTiles[NUM_OF_TILES];
 	DescriptorSet DSBeach[NUM_OF_TILES * 2];
+	DescriptorSet DSObstacles[NUM_OF_TILES][NUM_OF_OBST_PER_TILE];
 	// Textures
 	Texture /*T1,*/ T2;
+	Texture TDungeon;
 
 	// C++ storage for uniform variables
 	UniformBlock ubo1, ubo2, ubo3; // ubo4;
@@ -167,6 +175,9 @@ protected:
 
 		for (int i = 0; i < NUM_OF_TILES; i++) {
 			MTiles[i].init(this, &VD, "models/road_tile_2x2_005.mgcg", MGCG);
+			for (int j=0; j < NUM_OF_OBST_PER_TILE; j++){
+				MObstacles[i][j].init(this, &VD, "models/prop.050_Mesh.7300.mgcg", MGCG);
+			}
 		}
 		
 		//do the same for beach tiles
@@ -187,6 +198,7 @@ protected:
 		// The second parameter is the file name
 		// T1.init(this,   "textures/Checker.png");
 		T2.init(this, "textures/Textures_City.png");
+		TDungeon.init(this, "textures/Textures_Dungeon.png");
 
 		// Init local variables
 
@@ -232,6 +244,8 @@ protected:
 		for (DescriptorSet& DSBeach : DSBeach) {
 			DSBeach.init(this, &DSL, {{0, UNIFORM, sizeof(UniformBlock), nullptr}, {1, TEXTURE, 0, &T2}});
 		}
+        }
+		for 
 	}
 
 	// Here you destroy your pipelines and Descriptor Sets!
