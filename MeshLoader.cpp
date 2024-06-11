@@ -40,6 +40,9 @@ struct Tile
 
 Car car;
 Tile tile[NUM_OF_TILES];
+Tile beach[NUM_OF_TILES * 2];
+
+std::string beachModel;
 
 // MAIN !
 class MeshLoader : public BaseProject
@@ -62,9 +65,11 @@ protected:
 	// Models
 	Model<Vertex> M1, M2, M3; // M4
 	Model<Vertex> MTiles[NUM_OF_TILES];
+	Model<Vertex> MBeach[NUM_OF_TILES * 2];
 	// Descriptor sets
 	DescriptorSet DS1, DS2, DS3; // DS4;
 	DescriptorSet DSTiles[NUM_OF_TILES];
+	DescriptorSet DSBeach[NUM_OF_TILES * 2];
 	// Textures
 	Texture /*T1,*/ T2;
 
@@ -84,9 +89,9 @@ protected:
 		initialBackgroundColor = {0.0f, 0.005f, 0.01f, 1.0f};
 
 		// Descriptor pool sizes
-		uniformBlocksInPool = 30;
-		texturesInPool = 30;
-		setsInPool = 30;
+		uniformBlocksInPool = 70;
+		texturesInPool = 70;
+		setsInPool = 70;
 
 		Ar = (float)windowWidth / (float)windowHeight;
 	}
@@ -163,6 +168,14 @@ protected:
 		for (int i = 0; i < NUM_OF_TILES; i++) {
 			MTiles[i].init(this, &VD, "models/road_tile_2x2_005.mgcg", MGCG);
 		}
+		
+		//do the same for beach tiles
+		for (int i = 0; i < NUM_OF_TILES * 2; i++) {
+			//choose a random beach tile
+			int random = rand() % 4 + 4;
+			beachModel = "models/beach_tile_1x1_00" + std::to_string(random) + ".mgcg";
+			MBeach[i].init(this, &VD, beachModel, MGCG);
+		}
 
 		// Creates a mesh with direct enumeration of vertices and indices
 		// M4.vertices = {{{-6,-2,-6}, {0.0f,0.0f}}, {{-6,-2,6}, {0.0f,1.0f}},
@@ -179,6 +192,11 @@ protected:
 		for(int i = 0; i < NUM_OF_TILES; i++){
 			tile[i].pos.z = i * 16;
 		}
+
+		for (int i = 0; i < NUM_OF_TILES * 2; i++) {
+			beach[i].pos.z = i * 8;
+		}
+		
 	}
 
 	// Here you create your pipelines and Descriptor Sets!
@@ -207,6 +225,11 @@ protected:
 		for (DescriptorSet &DSTiles: DSTiles) {
             DSTiles.init(this, &DSL, {{0, UNIFORM, sizeof(UniformBlock), nullptr}, {1, TEXTURE, 0, &T2}});
         }
+
+		// do the same for beach tiles
+		for (DescriptorSet& DSBeach : DSBeach) {
+			DSBeach.init(this, &DSL, {{0, UNIFORM, sizeof(UniformBlock), nullptr}, {1, TEXTURE, 0, &T2}});
+		}
 	}
 
 	// Here you destroy your pipelines and Descriptor Sets!
@@ -224,6 +247,9 @@ protected:
 		for (DescriptorSet &DSTiles: DSTiles) {
             DSTiles.cleanup();
         }
+		for (DescriptorSet& DSBeach : DSBeach) {
+			DSBeach.cleanup();
+		}
 	}
 
 	// Here you destroy all the Models, Texture and Desc. Set Layouts you created!
@@ -243,6 +269,10 @@ protected:
 		// M4.cleanup();
 		for (Model<Vertex> &MTiles: MTiles){
 			MTiles.cleanup();
+		}
+		//beach cleanup
+		for (Model<Vertex> &MBeach : MBeach) {
+			MBeach.cleanup();
 		}
 
 		// Cleanup descriptor set layouts
@@ -300,6 +330,14 @@ protected:
 			vkCmdDrawIndexed(commandBuffer,
 						 static_cast<uint32_t>(MTiles[i].indices.size()), 1, 0, 0, 0);
 		}
+
+		for (int i = 0; i < NUM_OF_TILES * 2; i++) {
+			MBeach[i].bind(commandBuffer);
+			DSBeach[i].bind(commandBuffer, P, 0, currentImage);
+			vkCmdDrawIndexed(commandBuffer,
+						static_cast<uint32_t>(MBeach[i].indices.size()), 1, 0, 0, 0);
+		}
+
 	}
 
 	// Here is where you update the uniforms.
@@ -350,12 +388,6 @@ protected:
 
 		glm::mat4 World;
 
-		// Beach
-		World = glm::translate(glm::mat4(1), glm::vec3(10, 0, 0)) *
-				glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0, 1, 0));
-		ubo1.mvpMat = Prj * View * World;
-		DS1.map(currentImage, &ubo1, sizeof(ubo1), 0);
-
 		// Car
 		World = glm::translate(glm::mat4(1), glm::vec3(-car.pos.x, 0, car.pos.z));
 		ubo2.mvpMat = Prj * View * World;
@@ -379,6 +411,18 @@ protected:
 				glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0, 1, 0));
 			ubo3.mvpMat = Prj * View * World_Tiles[i];
 			DSTiles[i].map(currentImage, &ubo3, sizeof(ubo3), 0);
+		}
+
+		// Beach (8 x 8)
+        glm::mat4 World_Beach[NUM_OF_TILES * 2];
+		for (int i = 0; i < NUM_OF_TILES * 2; i++) {
+			if (beach[i].pos.z + 8 < car.pos.z) {
+				beach[i].pos.z = beach[i].pos.z + (NUM_OF_TILES * 2 - 1) * 8;
+			}
+			World_Beach[i] = glm::scale(glm::mat4(1), glm::vec3(1.0f)) * glm::translate(glm::mat4(1), glm::vec3(12, 0, beach[i].pos.z)) *
+				glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0, 1, 0));
+			ubo1.mvpMat = Prj * View * World_Beach[i];
+			DSBeach[i].map(currentImage, &ubo1, sizeof(ubo1), 0);
 		}
 
 		// UNCOMMENT BELOW IT WORKS!
