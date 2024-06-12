@@ -44,7 +44,7 @@ struct Obstacle {
 Car car;
 Tile tile[NUM_OF_TILES];
 Tile beach[NUM_OF_TILES * 2];
-Tile ocean[NUM_OF_TILES / 4];
+Tile sides[NUM_OF_TILES / 4];
 
 std::string beachModel;
 Obstacle obstacle[NUM_OF_TILES];
@@ -184,7 +184,7 @@ protected:
 		
 		//indices = {0, 1, 2,    1, 3, 2};
 		
-		float ocean_size = 32.0f;
+		float sides_size = 32.0f;
 
 		//vertices for square (size)
 
@@ -203,23 +203,23 @@ protected:
 
 		for (int i = 0; i < NUM_OF_TILES/2; i++) {
 			//draw ocean and sand
-			glm::vec3 surface = glm::vec3({ -ocean_size, 0.0f, -ocean_size });
+			glm::vec3 surface = glm::vec3({ -sides_size, 0.0f, -sides_size });
 			glm::vec3 normal = glm::vec3({ 0.0f, 1.0f, 0.0f });
 			glm::vec2 UV = glm::vec2({ 0.0f, 0.0f });
 			MOcean[i].vertices.push_back({ surface, normal, UV });
 			MSand[i].vertices.push_back({ surface, normal, UV });
 
-			surface = glm::vec3({ -ocean_size, 0.0f, ocean_size });
+			surface = glm::vec3({ -sides_size, 0.0f, sides_size });
 			UV = glm::vec2({ 0.0f, 1.0f });
 			MOcean[i].vertices.push_back({ surface, normal, UV });
 			MSand[i].vertices.push_back({ surface, normal, UV });
 
-			surface = glm::vec3({ ocean_size * 3, 0.0f, -ocean_size });
+			surface = glm::vec3({ sides_size * 3, 0.0f, -sides_size });
 			UV = glm::vec2({ 1.0f, 1.0f });
 			MOcean[i].vertices.push_back({ surface, normal, UV });
 			MSand[i].vertices.push_back({ surface, normal, UV });
 
-			surface = glm::vec3({ ocean_size * 3, 0.0f, ocean_size });
+			surface = glm::vec3({ sides_size * 3, 0.0f, sides_size });
 			UV = glm::vec2({ 1.0f, 0.0f });
 			MOcean[i].vertices.push_back({ surface, normal, UV });
 			MSand[i].vertices.push_back({ surface, normal, UV });
@@ -256,9 +256,9 @@ protected:
 			beach[i].pos.z = i * 8;
 		}
 
-		// Initial Positions of Ocean
+		// Initial Positions of Ocean and Sand
 		for (int i = 0; i < NUM_OF_TILES / 2; i++) {
-			ocean[i].pos.z = i * 64;
+			sides[i].pos.z = i * 64;
 		}
 		
 	}
@@ -558,19 +558,21 @@ protected:
 			DSObstacles[i].map(currentImage, &ubo3, sizeof(ubo3), 0);
 		}
 
-		// Ocean generation
-		glm::mat4 World_Ocean[NUM_OF_TILES/2];
+		// Ocean and sand generation
+		glm::mat4 World_Sides[NUM_OF_TILES/2];
 		for (int i = 0; i < NUM_OF_TILES/2; i++) {
-			if (ocean[i].pos.z + 64 < car.pos.z) {
-				ocean[i].pos.z = ocean[i].pos.z + (NUM_OF_TILES/4) * 64;
+			if (sides[i].pos.z + 64 < car.pos.z) {
+				sides[i].pos.z = sides[i].pos.z + (NUM_OF_TILES/4) * 64;
 			}
-			World_Ocean[i] = glm::translate(glm::mat4(1), glm::vec3(42.0f, -1.0f, ocean[i].pos.z));
-			ubo1.mvpMat = Prj * View * World_Ocean[i];
+			//Ocean
+			World_Sides[i] = glm::translate(glm::mat4(1), glm::vec3(42.0f, -1.0f, sides[i].pos.z));
+			ubo1.mvpMat = Prj * View * World_Sides[i];
 			DSOcean[i].map(currentImage, &ubo1, sizeof(ubo1), 0);
 
-			World_Ocean[i] = glm::translate(glm::mat4(1), glm::vec3(-42.0f, -1.0f, ocean[i].pos.z)) *
+			//Sand
+			World_Sides[i] = glm::translate(glm::mat4(1), glm::vec3(-42.0f, -1.0f, sides[i].pos.z)) *
 							glm::rotate(glm::mat4(1.0f), glm::radians(180.0f), glm::vec3(0, 1, 0));;
-			ubo3.mvpMat = Prj * View * World_Ocean[i];
+			ubo3.mvpMat = Prj * View * World_Sides[i];
 			DSSand[i].map(currentImage, &ubo3, sizeof(ubo3), 0);
 		}
 
