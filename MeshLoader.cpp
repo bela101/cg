@@ -44,6 +44,7 @@ struct Obstacle {
 Car car;
 Tile tile[NUM_OF_TILES];
 Tile beach[NUM_OF_TILES * 2];
+Tile ocean[NUM_OF_TILES / 4];
 
 std::string beachModel;
 Obstacle obstacle[NUM_OF_TILES];
@@ -71,14 +72,22 @@ protected:
 	Model<Vertex> MTiles[NUM_OF_TILES];
 	Model<Vertex> MBeach[NUM_OF_TILES * 2];
 	Model<Vertex> MObstacles[NUM_OF_TILES];
+	Model<Vertex> MOcean[NUM_OF_TILES/2];
+	Model<Vertex> MSand[NUM_OF_TILES/2];
+
 	// Descriptor sets
 	DescriptorSet DS1, DS2, DS3; // DS4;
 	DescriptorSet DSTiles[NUM_OF_TILES];
 	DescriptorSet DSBeach[NUM_OF_TILES * 2];
 	DescriptorSet DSObstacles[NUM_OF_TILES];
+	DescriptorSet DSOcean[NUM_OF_TILES/2];
+	DescriptorSet DSSand[NUM_OF_TILES/2];
+
 	// Textures
 	Texture /*T1,*/ T2;
 	Texture TDungeon;
+	Texture TOcean;
+	Texture TSand;
 
 	// C++ storage for uniform variables
 	UniformBlock ubo1, ubo2, ubo3; // ubo4;
@@ -93,12 +102,12 @@ protected:
 		windowHeight = 600;
 		windowTitle = "Mesh Loader";
 		windowResizable = GLFW_FALSE;
-		initialBackgroundColor = {0.0f, 0.005f, 0.01f, 1.0f};
+		initialBackgroundColor = { 0.0f, 0.005f, 0.01f, 1.0f };
 
 		// Descriptor pool sizes
-		uniformBlocksInPool = 70;
-		texturesInPool = 70;
-		setsInPool = 70;
+		uniformBlocksInPool = 200;
+		texturesInPool = 200;
+		setsInPool = 200;
 
 		Ar = (float)windowWidth / (float)windowHeight;
 	}
@@ -114,21 +123,21 @@ protected:
 	{
 		// Descriptor Layouts [what will be passed to the shaders]
 		DSL.init(this, {// this array contains the bindings:
-						// first  element : the binding number
-						// second element : the type of element (buffer or texture)
-						//                  using the corresponding Vulkan constant
-						// third  element : the pipeline stage where it will be used
-						//                  using the corresponding Vulkan constant
-						{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_ALL_GRAPHICS},
-						{1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT}});
+			// first  element : the binding number
+			// second element : the type of element (buffer or texture)
+			//                  using the corresponding Vulkan constant
+			// third  element : the pipeline stage where it will be used
+			//                  using the corresponding Vulkan constant
+			{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_ALL_GRAPHICS},
+			{1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT} });
 
 		// Vertex descriptors
 		VD.init(this, {// this array contains the bindings
-					   // first  element : the binding number
-					   // second element : the stride of this binging
-					   // third  element : whether this parameter change per vertex or per instance
-					   //                  using the corresponding Vulkan constant
-					   {0, sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX}},
+			// first  element : the binding number
+			// second element : the stride of this binging
+			// third  element : whether this parameter change per vertex or per instance
+			//                  using the corresponding Vulkan constant
+			{0, sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX} },
 				{// this array contains the location
 				 // first  element : the binding number
 				 // second element : the location number
@@ -150,16 +159,16 @@ protected:
 				 //	if you have more than one vertex format!
 				 // ***************************************************
 				 {0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, pos), sizeof(glm::vec3), POSITION},
-				 {0, 1, VK_FORMAT_R32G32_SFLOAT, offsetof(Vertex, UV), sizeof(glm::vec2), UV}});
+				 {0, 1, VK_FORMAT_R32G32_SFLOAT, offsetof(Vertex, UV), sizeof(glm::vec2), UV} });
 
 		// Pipelines [Shader couples]
 		// The second parameter is the pointer to the vertex definition
 		// Third and fourth parameters are respectively the vertex and fragment shaders
 		// The last array, is a vector of pointer to the layouts of the sets that will
 		// be used in this pipeline. The first element will be set 0, and so on..
-		P.init(this, &VD, "shaders/ShaderVert.spv", "shaders/ShaderFrag.spv", {&DSL});
+		P.init(this, &VD, "shaders/ShaderVert.spv", "shaders/ShaderFrag.spv", { &DSL });
 		P.setAdvancedFeatures(VK_COMPARE_OP_LESS_OR_EQUAL, VK_POLYGON_MODE_FILL,
-							  VK_CULL_MODE_NONE, false);
+			VK_CULL_MODE_NONE, false);
 		// Models, textures and Descriptors (values assigned to the uniforms)
 
 		// Create models
@@ -171,6 +180,13 @@ protected:
 		M2.init(this, &VD, "models/transport_sport_001_transport_sport_001.001.mgcg", MGCG);
 		// M3.init(this,   &VD, "Models/dish.005_Mesh.098.mgcg", MGCG);
 		M3.init(this, &VD, "models/Cube.obj", OBJ);
+		
+		
+		//indices = {0, 1, 2,    1, 3, 2};
+		
+		float ocean_size = 32.0f;
+
+		//vertices for square (size)
 
 		for (int i = 0; i < NUM_OF_TILES; i++) {
 			MTiles[i].init(this, &VD, "models/road_tile_2x2_005.mgcg", MGCG); // init Roadtiles 
@@ -180,11 +196,39 @@ protected:
 		//do the same for beach tiles
 		for (int i = 0; i < NUM_OF_TILES * 2; i++) {
 			//choose a random beach tile this allows for random order of tiles with every run of the game
-			int random = rand() % 4 + 4;
+			int random = rand() % 4 + 3;
 			beachModel = "models/beach_tile_1x1_00" + std::to_string(random) + ".mgcg";
 			MBeach[i].init(this, &VD, beachModel, MGCG);
 		}
 
+		for (int i = 0; i < NUM_OF_TILES/2; i++) {
+			//draw ocean and sand
+			glm::vec3 surface = glm::vec3({ -ocean_size, 0.0f, -ocean_size });
+			glm::vec3 normal = glm::vec3({ 0.0f, 1.0f, 0.0f });
+			glm::vec2 UV = glm::vec2({ 0.0f, 0.0f });
+			MOcean[i].vertices.push_back({ surface, normal, UV });
+			MSand[i].vertices.push_back({ surface, normal, UV });
+
+			surface = glm::vec3({ -ocean_size, 0.0f, ocean_size });
+			UV = glm::vec2({ 0.0f, 1.0f });
+			MOcean[i].vertices.push_back({ surface, normal, UV });
+			MSand[i].vertices.push_back({ surface, normal, UV });
+
+			surface = glm::vec3({ ocean_size * 3, 0.0f, -ocean_size });
+			UV = glm::vec2({ 1.0f, 1.0f });
+			MOcean[i].vertices.push_back({ surface, normal, UV });
+			MSand[i].vertices.push_back({ surface, normal, UV });
+
+			surface = glm::vec3({ ocean_size * 3, 0.0f, ocean_size });
+			UV = glm::vec2({ 1.0f, 0.0f });
+			MOcean[i].vertices.push_back({ surface, normal, UV });
+			MSand[i].vertices.push_back({ surface, normal, UV });
+
+			MOcean[i].indices = { 0, 1, 2, 1, 3, 2 };
+			MSand[i].indices = { 0, 1, 2, 1, 3, 2 };
+			MOcean[i].initMesh(this, &VD);
+			MSand[i].initMesh(this, &VD);
+		}
 		// Creates a mesh with direct enumeration of vertices and indices
 		// M4.vertices = {{{-6,-2,-6}, {0.0f,0.0f}}, {{-6,-2,6}, {0.0f,1.0f}},
 		// 			    {{6,-2,-6}, {1.0f,0.0f}}, {{ 6,-2,6}, {1.0f,1.0f}}};
@@ -196,6 +240,8 @@ protected:
 		// T1.init(this,   "textures/Checker.png");
 		T2.init(this, "textures/Textures_City.png");
 		TDungeon.init(this, "textures/Textures_Dungeon.png");
+		TOcean.init(this, "textures/water.jpg");
+		TSand.init(this, "textures/sand.jpg");
 
 		// Init local variables
 
@@ -209,6 +255,11 @@ protected:
 		for (int i = 0; i < NUM_OF_TILES * 2; i++) {
 			beach[i].pos.z = i * 8;
 		}
+
+		// Initial Positions of Ocean
+		for (int i = 0; i < NUM_OF_TILES / 2; i++) {
+			ocean[i].pos.z = i * 64;
+		}
 		
 	}
 
@@ -221,32 +272,38 @@ protected:
 		// Here you define the data set
 
 		DS1.init(this, &DSL, {// the second parameter, is a pointer to the Uniform Set Layout of this set
-							  // the last parameter is an array, with one element per binding of the set.
-							  // first  elmenet : the binding number
-							  // second element : UNIFORM or TEXTURE (an enum) depending on the type
-							  // third  element : only for UNIFORMs, the size of the corresponding C++ object. For texture, just put 0
-							  // fourth element : only for TEXTUREs, the pointer to the corresponding texture object. For uniforms, use nullptr
-							  {0, UNIFORM, sizeof(UniformBlock), nullptr},
-							  {1, TEXTURE, 0, &T2}});
+			// the last parameter is an array, with one element per binding of the set.
+			// first  elmenet : the binding number
+			// second element : UNIFORM or TEXTURE (an enum) depending on the type
+			// third  element : only for UNIFORMs, the size of the corresponding C++ object. For texture, just put 0
+			// fourth element : only for TEXTUREs, the pointer to the corresponding texture object. For uniforms, use nullptr
+			{0, UNIFORM, sizeof(UniformBlock), nullptr},
+			{1, TEXTURE, 0, &T2} });
 
-		DS2.init(this, &DSL, {{0, UNIFORM, sizeof(UniformBlock), nullptr}, {1, TEXTURE, 0, &T2}});
-		DS3.init(this, &DSL, {{0, UNIFORM, sizeof(UniformBlock), nullptr}, {1, TEXTURE, 0, &T2}});
+		DS2.init(this, &DSL, { {0, UNIFORM, sizeof(UniformBlock), nullptr}, {1, TEXTURE, 0, &T2} });
+		DS3.init(this, &DSL, { {0, UNIFORM, sizeof(UniformBlock), nullptr}, {1, TEXTURE, 0, &T2} });
 		/*DS4.init(this, &DSL, {
 					{0, UNIFORM, sizeof(UniformBlock), nullptr},
 					{1, TEXTURE, 0, &T1}
 				});*/
-		for (DescriptorSet &DSTiles: DSTiles) {
-            DSTiles.init(this, &DSL, {{0, UNIFORM, sizeof(UniformBlock), nullptr}, {1, TEXTURE, 0, &T2}});
-        }
+		for (DescriptorSet& DSTiles : DSTiles) {
+			DSTiles.init(this, &DSL, { {0, UNIFORM, sizeof(UniformBlock), nullptr}, {1, TEXTURE, 0, &T2} });
+		}
 
 		// do the same for beach tiles
-		for (DescriptorSet &DSBeach : DSBeach) {
-			DSBeach.init(this, &DSL, {{0, UNIFORM, sizeof(UniformBlock), nullptr}, {1, TEXTURE, 0, &T2}});
+		for (DescriptorSet& DSBeach : DSBeach) {
+			DSBeach.init(this, &DSL, { {0, UNIFORM, sizeof(UniformBlock), nullptr}, {1, TEXTURE, 0, &T2} });
 		}
-		for (DescriptorSet &DSObstacles : DSObstacles) {
-			DSObstacles.init(this, &DSL, {{0, UNIFORM, sizeof(UniformBlock), nullptr}, {1, TEXTURE, 0, &T2}});
+		for (DescriptorSet& DSObstacles : DSObstacles) {
+			DSObstacles.init(this, &DSL, { {0, UNIFORM, sizeof(UniformBlock), nullptr}, {1, TEXTURE, 0, &T2} });
 		}
-		
+		for (DescriptorSet& DSOcean : DSOcean) {
+			DSOcean.init(this, &DSL, { {0, UNIFORM, sizeof(UniformBlock), nullptr}, {1, TEXTURE, 0, &TOcean} });
+		}
+
+		for (DescriptorSet& DSSand : DSSand) {
+			DSSand.init(this, &DSL, { {0, UNIFORM, sizeof(UniformBlock), nullptr}, {1, TEXTURE, 0, &TSand} });
+		}
 	}
 
 	// Here you destroy your pipelines and Descriptor Sets!
@@ -270,6 +327,12 @@ protected:
 		for (DescriptorSet &DSObstacles : DSObstacles) {
 			DSObstacles.cleanup();
 		}
+		for (DescriptorSet& DSOcean : DSOcean) {
+			DSOcean.cleanup();
+		}
+		for (DescriptorSet& DSSand : DSSand) {
+			DSSand.cleanup();
+		}
 	}
 
 	// Here you destroy all the Models, Texture and Desc. Set Layouts you created!
@@ -281,6 +344,9 @@ protected:
 		// Cleanup textures
 		// T1.cleanup();
 		T2.cleanup();
+		TDungeon.cleanup();
+		TOcean.cleanup();
+		TSand.cleanup();
 
 		// Cleanup models
 		M1.cleanup();
@@ -296,6 +362,12 @@ protected:
 		}
 		for (Model<Vertex> &MObstacles : MObstacles) {
 			MObstacles.cleanup();
+		}
+		for (Model<Vertex>& MOcean : MOcean) {
+			MOcean.cleanup();
+		}
+		for (Model<Vertex>& MSand : MSand) {
+			MSand.cleanup();
 		}
 
 		// Cleanup descriptor set layouts
@@ -360,6 +432,7 @@ protected:
 			DSObstacles[i].bind(commandBuffer, P, 0, currentImage);
 			vkCmdDrawIndexed(commandBuffer,
 						 static_cast<uint32_t>(MObstacles[i].indices.size()), 1, 0, 0, 0);
+
 		}
 
 		// Bind Dataset, Model and record drawing command in command buffer
@@ -369,6 +442,20 @@ protected:
 			DSBeach[i].bind(commandBuffer, P, 0, currentImage);
 			vkCmdDrawIndexed(commandBuffer,
 						static_cast<uint32_t>(MBeach[i].indices.size()), 1, 0, 0, 0);
+		}
+
+		// Bind Dataset, Model and record drawing command in command buffer
+		for (int i = 0; i < NUM_OF_TILES / 2; i++) {
+			// Ocean
+			MOcean[i].bind(commandBuffer);
+			DSOcean[i].bind(commandBuffer, P, 0, currentImage);
+			vkCmdDrawIndexed(commandBuffer,
+								static_cast<uint32_t>(MOcean[i].indices.size()), 1, 0, 0, 0);
+			// Sand
+			MSand[i].bind(commandBuffer);
+			DSSand[i].bind(commandBuffer, P, 0, currentImage);
+			vkCmdDrawIndexed(commandBuffer,
+												static_cast<uint32_t>(MSand[i].indices.size()), 1, 0, 0, 0);
 		}
 
 	}
@@ -470,6 +557,23 @@ protected:
 			ubo3.mvpMat = Prj * View * World_Obstacles[i];
 			DSObstacles[i].map(currentImage, &ubo3, sizeof(ubo3), 0);
 		}
+
+		// Ocean generation
+		glm::mat4 World_Ocean[NUM_OF_TILES/2];
+		for (int i = 0; i < NUM_OF_TILES/2; i++) {
+			if (ocean[i].pos.z + 64 < car.pos.z) {
+				ocean[i].pos.z = ocean[i].pos.z + (NUM_OF_TILES/4) * 64;
+			}
+			World_Ocean[i] = glm::translate(glm::mat4(1), glm::vec3(42.0f, -1.0f, ocean[i].pos.z));
+			ubo1.mvpMat = Prj * View * World_Ocean[i];
+			DSOcean[i].map(currentImage, &ubo1, sizeof(ubo1), 0);
+
+			World_Ocean[i] = glm::translate(glm::mat4(1), glm::vec3(-42.0f, -1.0f, ocean[i].pos.z)) *
+							glm::rotate(glm::mat4(1.0f), glm::radians(180.0f), glm::vec3(0, 1, 0));;
+			ubo3.mvpMat = Prj * View * World_Ocean[i];
+			DSSand[i].map(currentImage, &ubo3, sizeof(ubo3), 0);
+		}
+
 
 		// World = glm::scale(glm::mat4(1), glm::vec3(1.0f)) * glm::translate(glm::mat4(1), glm::vec3(0, 0, 20)) *
 		// 		glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0, 1, 0));
