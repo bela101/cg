@@ -504,8 +504,8 @@ protected:
 
 		// Controls
 		// car.pos.z += glm::abs(m.z) * 0.8f; // allow only forward movement UNCOMMENT WHEN COLLISION DETECTION IS IMPLEMENTED
-		car.pos.z += m.z * 0.8f; // until COLLISION DETECTION is implemented we allow backwards driving for testing 
-		car.pos.x += (int)m.x * 0.4f;
+		car.pos.z += m.z * 70.0f * deltaT; // until COLLISION DETECTION is implemented we allow backwards driving for testing 
+		car.pos.x += (int)m.x * 20.0f * deltaT;
 		car.pos.x = glm::clamp(car.pos.x, -4.0f, 4.0f); // keep the car on the road
 
 		// translate car movement
