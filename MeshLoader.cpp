@@ -17,6 +17,24 @@ struct UniformBlock
 {
 	alignas(16) glm::mat4 mvpMat;
 };
+struct GlobalUniformBlock{
+	alignas(16) glm::vec3 DirectLightColor;
+	alignas(16) glm::vec3 DirectLightPos;
+	alignas(16) glm::vec3 AmbientLightColor;
+	alignas(16) glm::vec3 CameraPos;
+};
+struct UniformBufferObject
+{
+	alignas(16) glm::mat4 mvpMat;
+	alignas(16) glm::mat4 mMat;
+	alignas(16) glm::mat4 nMat;
+};
+struct GlobalUniformBufferObject
+{
+	alignas(16) glm::vec3 lightDir;
+	alignas(16) glm::vec4 lightColor;
+	alignas(16) glm::vec3 eyePos;
+};
 
 // The vertices data structures
 // Example
@@ -55,15 +73,25 @@ class MeshLoader : public BaseProject
 protected:
 	// Current aspect ratio (used by the callback that resized the window
 	float Ar;
+	// 
+	Car car;
+	Tile tile[NUM_OF_TILES];
+	Tile beach[NUM_OF_TILES * 2];
+
+	std::string beachModel;
+	Obstacle obstacle[NUM_OF_TILES];
 
 	// Descriptor Layouts ["classes" of what will be passed to the shaders]
 	DescriptorSetLayout DSL;
+	DescriptorSetLayout DSLBlinn;
 
 	// Vertex formats
 	VertexDescriptor VD;
+	VertexDescriptor VDRoad;
 
 	// Pipelines [Shader couples]
 	Pipeline P;
+	Pipeline PBlinn;
 
 	// Models, textures and Descriptors (values assigned to the uniforms)
 	// Please note that Model objects depends on the corresponding vertex structure
@@ -91,6 +119,8 @@ protected:
 
 	// C++ storage for uniform variables
 	UniformBlock ubo1, ubo2, ubo3; // ubo4;
+	UniformBufferObject uboBlinn;
+	GlobalUniformBufferObject gubo;
 
 	// Other application parameters
 
@@ -123,22 +153,36 @@ protected:
 	{
 		// Descriptor Layouts [what will be passed to the shaders]
 		DSL.init(this, {// this array contains the bindings:
-			// first  element : the binding number
-			// second element : the type of element (buffer or texture)
-			//                  using the corresponding Vulkan constant
-			// third  element : the pipeline stage where it will be used
-			//                  using the corresponding Vulkan constant
-			{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_ALL_GRAPHICS},
-			{1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT} });
+						// first  element : the binding number
+						// second element : the type of element (buffer or texture)
+						//                  using the corresponding Vulkan constant
+						// third  element : the pipeline stage where it will be used
+						//                  using the corresponding Vulkan constant
+						{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_ALL_GRAPHICS}, // DSL DS's have one Uniform Buffer
+						{1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT}}); // DSL DS's have one texture
 
+		DSLBlinn.init(this, {{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_ALL_GRAPHICS}, // DSLBLINN DS's have two Uniform Buffers
+							 {1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT}, // DSLBLINN DS's have one Texture
+							 {2, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_ALL_GRAPHICS},
+						});
+
+
+		VDRoad.init(this, {{0, sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX}},
+						{{0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, pos), sizeof(glm::vec3), POSITION},
+						 {0, 1, VK_FORMAT_R32G32_SFLOAT, offsetof(Vertex, UV), sizeof(glm::vec2), UV},
+						 {0, 2, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, norm), sizeof(glm::vec3), NORMAL},
+						});
+		
 		// Vertex descriptors
 		VD.init(this, {// this array contains the bindings
-			// first  element : the binding number
-			// second element : the stride of this binging
-			// third  element : whether this parameter change per vertex or per instance
-			//                  using the corresponding Vulkan constant
-			{0, sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX} },
-				{// this array contains the location
+					   // first  element : the binding number
+					   // second element : the stride of this binging
+					   // third  element : whether this parameter change per vertex or per instance
+					   //                  using the corresponding Vulkan constant
+					   {0, sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX}},
+				{{0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, pos), sizeof(glm::vec3), POSITION},
+				 {0, 1, VK_FORMAT_R32G32_SFLOAT, offsetof(Vertex, UV), sizeof(glm::vec2), UV},
+				// this array contains the location
 				 // first  element : the binding number
 				 // second element : the location number
 				 // third  element : the offset of this element in the memory record
@@ -158,8 +202,7 @@ protected:
 				 //	in the "sizeof" in the previous array, refers to the correct one,
 				 //	if you have more than one vertex format!
 				 // ***************************************************
-				 {0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, pos), sizeof(glm::vec3), POSITION},
-				 {0, 1, VK_FORMAT_R32G32_SFLOAT, offsetof(Vertex, UV), sizeof(glm::vec2), UV} });
+				 });
 
 		// Pipelines [Shader couples]
 		// The second parameter is the pointer to the vertex definition
@@ -168,7 +211,9 @@ protected:
 		// be used in this pipeline. The first element will be set 0, and so on..
 		P.init(this, &VD, "shaders/ShaderVert.spv", "shaders/ShaderFrag.spv", { &DSL });
 		P.setAdvancedFeatures(VK_COMPARE_OP_LESS_OR_EQUAL, VK_POLYGON_MODE_FILL,
-			VK_CULL_MODE_NONE, false);
+							  VK_CULL_MODE_NONE, false);
+		PBlinn.init(this, &VDRoad, "shaders/RoadVert.spv", "shaders/BlinnFrag.spv", {&DSLBlinn});
+		
 		// Models, textures and Descriptors (values assigned to the uniforms)
 
 		// Create models
@@ -268,6 +313,7 @@ protected:
 	{
 		// This creates a new pipeline (with the current surface), using its shaders
 		P.create();
+		PBlinn.create();
 
 		// Here you define the data set
 
@@ -286,16 +332,26 @@ protected:
 					{0, UNIFORM, sizeof(UniformBlock), nullptr},
 					{1, TEXTURE, 0, &T1}
 				});*/
-		for (DescriptorSet& DSTiles : DSTiles) {
-			DSTiles.init(this, &DSL, { {0, UNIFORM, sizeof(UniformBlock), nullptr}, {1, TEXTURE, 0, &T2} });
-		}
+		for (DescriptorSet &DSTiles: DSTiles) {
+            DSTiles.init(this, &DSLBlinn, {
+				{0, UNIFORM, sizeof(UniformBufferObject), nullptr}, 
+				{1, TEXTURE, 0, &T2}, 
+				{2, UNIFORM, sizeof(GlobalUniformBufferObject), nullptr} 
+			});
+        }
 
 		// do the same for beach tiles
-		for (DescriptorSet& DSBeach : DSBeach) {
-			DSBeach.init(this, &DSL, { {0, UNIFORM, sizeof(UniformBlock), nullptr}, {1, TEXTURE, 0, &T2} });
+		for (DescriptorSet &DSBeach : DSBeach) {
+			DSBeach.init(this, &DSL, {
+				{0, UNIFORM, sizeof(UniformBlock), nullptr}, 
+				{1, TEXTURE, 0, &T2}
+			});
 		}
-		for (DescriptorSet& DSObstacles : DSObstacles) {
-			DSObstacles.init(this, &DSL, { {0, UNIFORM, sizeof(UniformBlock), nullptr}, {1, TEXTURE, 0, &T2} });
+		for (DescriptorSet &DSObstacles : DSObstacles) {
+			DSObstacles.init(this, &DSL, {
+				{0, UNIFORM, sizeof(UniformBlock), nullptr}, 
+				{1, TEXTURE, 0, &T2}
+			});
 		}
 		for (DescriptorSet& DSOcean : DSOcean) {
 			DSOcean.init(this, &DSL, { {0, UNIFORM, sizeof(UniformBlock), nullptr}, {1, TEXTURE, 0, &TOcean} });
@@ -312,12 +368,14 @@ protected:
 	{
 		// Cleanup pipelines
 		P.cleanup();
+		PBlinn.cleanup();
 
 		// Cleanup datasets
 		DS1.cleanup();
 		DS2.cleanup();
 		DS3.cleanup();
 		// DS4.cleanup();
+
 		for (DescriptorSet &DSTiles: DSTiles) {
             DSTiles.cleanup();
         }
@@ -372,9 +430,11 @@ protected:
 
 		// Cleanup descriptor set layouts
 		DSL.cleanup();
+		DSLBlinn.cleanup();
 
 		// Destroys the pipelines
 		P.destroy();
+		PBlinn.destroy();
 	}
 
 	// Here it is the creation of the command buffer:
@@ -383,9 +443,10 @@ protected:
 
 	void populateCommandBuffer(VkCommandBuffer commandBuffer, int currentImage)
 	{
+		// std::cout << "HI";
 		// binds the pipeline
-		P.bind(commandBuffer);
 		// For a pipeline object, this command binds the corresponding pipeline to the command buffer passed in its parameter
+		P.bind(commandBuffer);
 
 		// binds the data set
 		DS1.bind(commandBuffer, P, 0, currentImage);
@@ -419,14 +480,9 @@ protected:
 		//  M4.bind(commandBuffer);
 		//  vkCmdDrawIndexed(commandBuffer,
 		//  		static_cast<uint32_t>(M4.indices.size()), 1, 0, 0, 0);
-
+		
 		// Bind Dataset, Model and record drawing command in command buffer
 		for (int i = 0; i < NUM_OF_TILES; i++){
-			// Roadtiles
-			MTiles[i].bind(commandBuffer);
-			DSTiles[i].bind(commandBuffer, P, 0, currentImage);
-			vkCmdDrawIndexed(commandBuffer,
-						 static_cast<uint32_t>(MTiles[i].indices.size()), 1, 0, 0, 0);
 			// Obstacles
 			MObstacles[i].bind(commandBuffer);
 			DSObstacles[i].bind(commandBuffer, P, 0, currentImage);
@@ -458,8 +514,16 @@ protected:
 												static_cast<uint32_t>(MSand[i].indices.size()), 1, 0, 0, 0);
 		}
 
+		PBlinn.bind(commandBuffer);
+		for (int i = 0; i < NUM_OF_TILES; i++)
+		{
+			// Roadtiles
+			MTiles[i].bind(commandBuffer);
+			DSTiles[i].bind(commandBuffer, PBlinn, 0, currentImage);
+			vkCmdDrawIndexed(commandBuffer,
+							 static_cast<uint32_t>(MTiles[i].indices.size()), 1, 0, 0, 0);
+		}
 	}
-
 	// Here is where you update the uniforms.
 	// Very likely this will be where you will be writing the logic of your application.
 	void updateUniformBuffer(uint32_t currentImage)
@@ -530,7 +594,8 @@ protected:
 			World_Tiles[i] = glm::translate(glm::mat4(1), glm::vec3(0, 0, tile[i].pos.z)) *
 				glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0, 1, 0));
 			ubo3.mvpMat = Prj * View * World_Tiles[i];
-			DSTiles[i].map(currentImage, &ubo3, sizeof(ubo3), 0);
+			DSTiles[i].map(currentImage, &uboBlinn, sizeof(uboBlinn), 0);
+			DSTiles[i].map(currentImage, &gubo, sizeof(gubo), 2);
 		}
 
 		// Beach (8 x 8)
