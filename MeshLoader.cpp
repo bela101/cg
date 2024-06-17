@@ -59,14 +59,6 @@ struct Obstacle {
 	glm::vec3 pos;
 };
 
-Car car;
-Tile tile[NUM_OF_TILES];
-Tile beach[NUM_OF_TILES * 2];
-Tile sides[NUM_OF_TILES / 4];
-
-std::string beachModel;
-Obstacle obstacle[NUM_OF_TILES];
-
 // MAIN !
 class MeshLoader : public BaseProject
 {
@@ -77,6 +69,7 @@ protected:
 	Car car;
 	Tile tile[NUM_OF_TILES];
 	Tile beach[NUM_OF_TILES * 2];
+	Tile sides[NUM_OF_TILES / 4];
 
 	std::string beachModel;
 	Obstacle obstacle[NUM_OF_TILES];
@@ -119,7 +112,7 @@ protected:
 
 	// C++ storage for uniform variables
 	UniformBlock ubo1, ubo2, ubo3; // ubo4;
-	UniformBufferObject uboBlinn;
+	UniformBufferObject ubo;
 	GlobalUniformBufferObject gubo;
 
 	// Other application parameters
@@ -213,6 +206,8 @@ protected:
 		P.setAdvancedFeatures(VK_COMPARE_OP_LESS_OR_EQUAL, VK_POLYGON_MODE_FILL,
 							  VK_CULL_MODE_NONE, false);
 		PBlinn.init(this, &VDRoad, "shaders/RoadVert.spv", "shaders/BlinnFrag.spv", {&DSLBlinn});
+		PBlinn.setAdvancedFeatures(VK_COMPARE_OP_LESS_OR_EQUAL, VK_POLYGON_MODE_FILL,
+							  VK_CULL_MODE_NONE, false);
 		
 		// Models, textures and Descriptors (values assigned to the uniforms)
 
@@ -221,20 +216,12 @@ protected:
 		// The third parameter is the file name
 		// The last is a constant specifying the file type: currently only OBJ or GLTF
 		M1.init(this, &VD, "models/beach_tile_1x1_003.mgcg", MGCG);
-		// M2.init(this,   &VD, "Models/Sphere.gltf", GLTF);
 		M2.init(this, &VD, "models/transport_sport_001_transport_sport_001.001.mgcg", MGCG);
-		// M3.init(this,   &VD, "Models/dish.005_Mesh.098.mgcg", MGCG);
 		M3.init(this, &VD, "models/Cube.obj", OBJ);
 		
 		
-		//indices = {0, 1, 2,    1, 3, 2};
-		
-		float sides_size = 32.0f;
-
-		//vertices for square (size)
-
 		for (int i = 0; i < NUM_OF_TILES; i++) {
-			MTiles[i].init(this, &VD, "models/road_tile_2x2_005.mgcg", MGCG); // init Roadtiles 
+			MTiles[i].init(this, &VDRoad, "models/road_tile_2x2_005.mgcg", MGCG); // init Roadtiles 
 			MObstacles[i].init(this, &VD, "models/box_005.mgcg", MGCG); // init Obstacles
 		}
 		
@@ -246,6 +233,8 @@ protected:
 			MBeach[i].init(this, &VD, beachModel, MGCG);
 		}
 
+		//vertices for square (size)
+		float sides_size = 32.0f;
 		for (int i = 0; i < NUM_OF_TILES/2; i++) {
 			//draw ocean and sand
 			glm::vec3 surface = glm::vec3({ -sides_size, 0.0f, -sides_size });
@@ -274,15 +263,8 @@ protected:
 			MOcean[i].initMesh(this, &VD);
 			MSand[i].initMesh(this, &VD);
 		}
-		// Creates a mesh with direct enumeration of vertices and indices
-		// M4.vertices = {{{-6,-2,-6}, {0.0f,0.0f}}, {{-6,-2,6}, {0.0f,1.0f}},
-		// 			    {{6,-2,-6}, {1.0f,0.0f}}, {{ 6,-2,6}, {1.0f,1.0f}}};
-		// M4.indices = {0, 1, 2,    1, 3, 2};
-		// M4.initMesh(this, &VD);
 
 		// Create the textures
-		// The second parameter is the file name
-		// T1.init(this,   "textures/Checker.png");
 		T2.init(this, "textures/Textures_City.png");
 		TDungeon.init(this, "textures/Textures_Dungeon.png");
 		TOcean.init(this, "textures/water.jpg");
@@ -300,11 +282,12 @@ protected:
 		for (int i = 0; i < NUM_OF_TILES * 2; i++) {
 			beach[i].pos.z = i * 8;
 		}
-
 		// Initial Positions of Ocean and Sand
 		for (int i = 0; i < NUM_OF_TILES / 2; i++) {
 			sides[i].pos.z = i * 64;
 		}
+
+
 		
 	}
 
@@ -317,7 +300,8 @@ protected:
 
 		// Here you define the data set
 
-		DS1.init(this, &DSL, {// the second parameter, is a pointer to the Uniform Set Layout of this set
+		DS1.init(this, &DSL, {
+			// the second parameter, is a pointer to the Uniform Set Layout of this set
 			// the last parameter is an array, with one element per binding of the set.
 			// first  elmenet : the binding number
 			// second element : UNIFORM or TEXTURE (an enum) depending on the type
@@ -562,6 +546,12 @@ protected:
 		glm::vec3 camPos = camTarget + glm::vec3(0, 5, -20) / 2.0f; 
 		// glm::vec3 camPos = camTarget + glm::vec3(0, 50, -80) / 2.0f; //debugging cam
 
+		// Init Gubo
+		gubo.lightColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
+		gubo.lightDir = glm::normalize(glm::vec3(2.0f, 3.0f, -3.0f));
+		gubo.eyePos = camPos;
+		
+
 		glm::mat4 View = glm::lookAt(camPos, camTarget, glm::vec3(0, 1, 0));
 		glm::mat4 World;
 
@@ -580,9 +570,7 @@ protected:
 		// the second parameter is the pointer to the C++ data structure to transfer to the GPU
 		// the third parameter is its size
 		// the fourth parameter is the location inside the descriptor set of this uniform block
-		// World = glm::translate(glm::mat4(1), glm::vec3(0, 0, 0));
-		// ubo2.mvpMat = Prj * View * World;
-		// DS2.map(currentImage, &ubo2, sizeof(ubo2), 0);
+
 
 		// Road Generation
 		// TILE SIZE 16 x 16
@@ -593,9 +581,20 @@ protected:
 			} 
 			World_Tiles[i] = glm::translate(glm::mat4(1), glm::vec3(0, 0, tile[i].pos.z)) *
 				glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0, 1, 0));
-			ubo3.mvpMat = Prj * View * World_Tiles[i];
-			DSTiles[i].map(currentImage, &uboBlinn, sizeof(uboBlinn), 0);
-			DSTiles[i].map(currentImage, &gubo, sizeof(gubo), 2);
+			ubo.mMat = glm::translate(glm::mat4(1), glm::vec3(0, 0, tile[i].pos.z)) *
+				glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0, 1, 0));
+			ubo.mvpMat = Prj * View * ubo.mMat;
+			ubo.nMat = glm::inverse(glm::transpose(ubo.mMat));
+			// for (int i = 0; i < 4; ++i) {
+			// 		for (int j = 0; j < 4; ++j) {
+			// 			std::cout << ubo.nMat[i][j] << ' ';
+			// 		}
+			// 		std::cout << '\n';
+			// 	}			
+			// ubo3.mvpMat = Prj * View * World_Tiles[i];
+			// ubo is used for the street 
+			DSTiles[i].map(currentImage, &ubo, sizeof(ubo), 0);
+			DSTiles[i].map(currentImage, &gubo, sizeof(gubo), 2); 
 		}
 
 		// Beach (8 x 8)
