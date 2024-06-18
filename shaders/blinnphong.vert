@@ -16,8 +16,15 @@ layout(location = 1) out vec3 fragNorm;
 layout(location = 2) out vec2 fragTexCoord;
 
 void main() {
-	gl_Position = ubo.mvpMat * vec4(inPosition, 1.0);
+  	// transform pos to vec3 in world space
 	fragPos = (ubo.mMat * vec4(inPosition, 1.0)).xyz;
-	fragNorm = mat3(ubo.nMat) * inNormal;
+	
+	// transform normals to world space
+	fragNorm = mat3(ubo.nMat) * inNormal; // inverse matrix * normal
+
+	// equal to uv
 	fragTexCoord = inTexCoord;
+
+	// NDC - normalized device coords 
+	gl_Position = ubo.mvpMat * vec4(inPosition, 1.0); // model view projection matrix * position
 }

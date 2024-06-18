@@ -77,24 +77,27 @@ protected:
 	// Descriptor Layouts ["classes" of what will be passed to the shaders]
 	DescriptorSetLayout DSL;
 	DescriptorSetLayout DSLBlinn;
+	DescriptorSetLayout DSLCookTorrance;
 
 	// Vertex formats
 	VertexDescriptor VD;
-	VertexDescriptor VDRoad;
+	VertexDescriptor VDBlinn;
+	VertexDescriptor VDCookTorrance;
 
 	// Pipelines [Shader couples]
 	Pipeline P;
 	Pipeline PBlinn;
+	Pipeline PCookTorrance;
 
 	// Models, textures and Descriptors (values assigned to the uniforms)
 	// Please note that Model objects depends on the corresponding vertex structure
 	// Models
-	Model<Vertex> M1, M2, M3; // M4
 	Model<Vertex> MTiles[NUM_OF_TILES];
 	Model<Vertex> MBeach[NUM_OF_TILES * 2];
 	Model<Vertex> MObstacles[NUM_OF_TILES];
 	Model<Vertex> MOcean[NUM_OF_TILES/2];
 	Model<Vertex> MSand[NUM_OF_TILES/2];
+	Model<Vertex> MCar;
 
 	// Descriptor sets
 	DescriptorSet DS1, DS2, DS3; // DS4;
@@ -159,8 +162,19 @@ protected:
 							 {2, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_ALL_GRAPHICS},
 						});
 
+		DSLCookTorrance.init(this, {{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_ALL_GRAPHICS}, // DSLCookTorrance DS's have two Uniform Buffers
+							 {1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT}, // DSLCookTorrance DS's have one Texture
+							 {2, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_ALL_GRAPHICS},
+						});
 
-		VDRoad.init(this, {{0, sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX}},
+
+		VDBlinn.init(this, {{0, sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX}},
+						{{0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, pos), sizeof(glm::vec3), POSITION},
+						 {0, 1, VK_FORMAT_R32G32_SFLOAT, offsetof(Vertex, UV), sizeof(glm::vec2), UV},
+						 {0, 2, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, norm), sizeof(glm::vec3), NORMAL},
+						});
+
+		VDCookTorrance.init(this, {{0, sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX}},
 						{{0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, pos), sizeof(glm::vec3), POSITION},
 						 {0, 1, VK_FORMAT_R32G32_SFLOAT, offsetof(Vertex, UV), sizeof(glm::vec2), UV},
 						 {0, 2, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, norm), sizeof(glm::vec3), NORMAL},
@@ -205,9 +219,14 @@ protected:
 		P.init(this, &VD, "shaders/ShaderVert.spv", "shaders/ShaderFrag.spv", { &DSL });
 		P.setAdvancedFeatures(VK_COMPARE_OP_LESS_OR_EQUAL, VK_POLYGON_MODE_FILL,
 							  VK_CULL_MODE_NONE, false);
-		PBlinn.init(this, &VDRoad, "shaders/RoadVert.spv", "shaders/BlinnFrag.spv", {&DSLBlinn});
+		PBlinn.init(this, &VDBlinn, "shaders/blinnphongVert.spv", "shaders/blinnphongFrag.spv", {&DSLBlinn});
 		PBlinn.setAdvancedFeatures(VK_COMPARE_OP_LESS_OR_EQUAL, VK_POLYGON_MODE_FILL,
 							  VK_CULL_MODE_NONE, false);
+		PCookTorrance.init(this, &VDCookTorrance, "shaders/cooktorranceVert.spv", "shaders/cooktorranceFrag.spv", {&DSLCookTorrance});
+		PCookTorrance.setAdvancedFeatures(VK_COMPARE_OP_LESS_OR_EQUAL, VK_POLYGON_MODE_FILL,
+							  VK_CULL_MODE_NONE, false);
+
+		
 		
 		// Models, textures and Descriptors (values assigned to the uniforms)
 
@@ -215,14 +234,13 @@ protected:
 		// The second parameter is the pointer to the vertex definition for this model
 		// The third parameter is the file name
 		// The last is a constant specifying the file type: currently only OBJ or GLTF
-		M1.init(this, &VD, "models/beach_tile_1x1_003.mgcg", MGCG);
-		M2.init(this, &VD, "models/transport_sport_001_transport_sport_001.001.mgcg", MGCG);
-		M3.init(this, &VD, "models/Cube.obj", OBJ);
+		// MCar.init(this, &VD, "models/transport_sport_001_transport_sport_001.001.mgcg", MGCG);
+		MCar.init(this, &VDBlinn, "models/transport_sport_001_transport_sport_001.001.mgcg", MGCG);
 		
-		
+		// init models for tiles and obstacles
 		for (int i = 0; i < NUM_OF_TILES; i++) {
-			MTiles[i].init(this, &VDRoad, "models/road_tile_2x2_005.mgcg", MGCG); // init Roadtiles 
-			MObstacles[i].init(this, &VD, "models/box_005.mgcg", MGCG); // init Obstacles
+			MTiles[i].init(this, &VDCookTorrance, "models/road_tile_2x2_005.mgcg", MGCG); // init Roadtiles 
+			MObstacles[i].init(this, &VDBlinn, "models/box_005.mgcg", MGCG); // init Obstacles
 		}
 		
 		//do the same for beach tiles
@@ -230,7 +248,7 @@ protected:
 			//choose a random beach tile this allows for random order of tiles with every run of the game
 			int random = rand() % 4 + 3;
 			beachModel = "models/beach_tile_1x1_00" + std::to_string(random) + ".mgcg";
-			MBeach[i].init(this, &VD, beachModel, MGCG);
+			MBeach[i].init(this, &VDBlinn, beachModel, MGCG);
 		}
 
 		//vertices for square (size)
@@ -260,8 +278,8 @@ protected:
 
 			MOcean[i].indices = { 0, 1, 2, 1, 3, 2 };
 			MSand[i].indices = { 0, 1, 2, 1, 3, 2 };
-			MOcean[i].initMesh(this, &VD);
-			MSand[i].initMesh(this, &VD);
+			MOcean[i].initMesh(this, &VDBlinn);
+			MSand[i].initMesh(this, &VDBlinn);
 		}
 
 		// Create the textures
@@ -297,6 +315,7 @@ protected:
 		// This creates a new pipeline (with the current surface), using its shaders
 		P.create();
 		PBlinn.create();
+		PCookTorrance.create();
 
 		// Here you define the data set
 
@@ -310,14 +329,19 @@ protected:
 			{0, UNIFORM, sizeof(UniformBlock), nullptr},
 			{1, TEXTURE, 0, &T2} });
 
-		DS2.init(this, &DSL, { {0, UNIFORM, sizeof(UniformBlock), nullptr}, {1, TEXTURE, 0, &T2} });
-		DS3.init(this, &DSL, { {0, UNIFORM, sizeof(UniformBlock), nullptr}, {1, TEXTURE, 0, &T2} });
-		/*DS4.init(this, &DSL, {
-					{0, UNIFORM, sizeof(UniformBlock), nullptr},
-					{1, TEXTURE, 0, &T1}
-				});*/
+		DS2.init(this, &DSLBlinn, { 
+			{0, UNIFORM, sizeof(UniformBlock), nullptr}, 
+			{1, TEXTURE, 0, &T2},
+			{2, UNIFORM, sizeof(GlobalUniformBufferObject), nullptr} 
+		});
+
+		DS3.init(this, &DSL, { 
+			{0, UNIFORM, sizeof(UniformBlock), nullptr}, 
+			{1, TEXTURE, 0, &T2} 
+		});
+
 		for (DescriptorSet &DSTiles: DSTiles) {
-            DSTiles.init(this, &DSLBlinn, {
+            DSTiles.init(this, &DSLCookTorrance, {
 				{0, UNIFORM, sizeof(UniformBufferObject), nullptr}, 
 				{1, TEXTURE, 0, &T2}, 
 				{2, UNIFORM, sizeof(GlobalUniformBufferObject), nullptr} 
@@ -326,23 +350,33 @@ protected:
 
 		// do the same for beach tiles
 		for (DescriptorSet &DSBeach : DSBeach) {
-			DSBeach.init(this, &DSL, {
+			DSBeach.init(this, &DSLBlinn, {
 				{0, UNIFORM, sizeof(UniformBlock), nullptr}, 
-				{1, TEXTURE, 0, &T2}
+				{1, TEXTURE, 0, &T2},
+				{2, UNIFORM, sizeof(GlobalUniformBufferObject), nullptr} 
 			});
 		}
 		for (DescriptorSet &DSObstacles : DSObstacles) {
-			DSObstacles.init(this, &DSL, {
+			DSObstacles.init(this, &DSLBlinn, {
 				{0, UNIFORM, sizeof(UniformBlock), nullptr}, 
-				{1, TEXTURE, 0, &T2}
+				{1, TEXTURE, 0, &T2},
+				{2, UNIFORM, sizeof(GlobalUniformBufferObject), nullptr} 
 			});
 		}
 		for (DescriptorSet& DSOcean : DSOcean) {
-			DSOcean.init(this, &DSL, { {0, UNIFORM, sizeof(UniformBlock), nullptr}, {1, TEXTURE, 0, &TOcean} });
+			DSOcean.init(this, &DSLBlinn, { 
+				{0, UNIFORM, sizeof(UniformBlock), nullptr}, 
+				{1, TEXTURE, 0, &TOcean},
+				{2, UNIFORM, sizeof(GlobalUniformBufferObject), nullptr} 
+			});
 		}
 
 		for (DescriptorSet& DSSand : DSSand) {
-			DSSand.init(this, &DSL, { {0, UNIFORM, sizeof(UniformBlock), nullptr}, {1, TEXTURE, 0, &TSand} });
+			DSSand.init(this, &DSLBlinn, { 
+				{0, UNIFORM, sizeof(UniformBlock), nullptr}, 
+				{1, TEXTURE, 0, &TSand},
+				{2, UNIFORM, sizeof(GlobalUniformBufferObject), nullptr} 
+			});
 		}
 	}
 
@@ -353,6 +387,7 @@ protected:
 		// Cleanup pipelines
 		P.cleanup();
 		PBlinn.cleanup();
+		PCookTorrance.cleanup();
 
 		// Cleanup datasets
 		DS1.cleanup();
@@ -369,10 +404,10 @@ protected:
 		for (DescriptorSet &DSObstacles : DSObstacles) {
 			DSObstacles.cleanup();
 		}
-		for (DescriptorSet& DSOcean : DSOcean) {
+		for (DescriptorSet &DSOcean : DSOcean) {
 			DSOcean.cleanup();
 		}
-		for (DescriptorSet& DSSand : DSSand) {
+		for (DescriptorSet &DSSand : DSSand) {
 			DSSand.cleanup();
 		}
 	}
@@ -391,9 +426,7 @@ protected:
 		TSand.cleanup();
 
 		// Cleanup models
-		M1.cleanup();
-		M2.cleanup();
-		M3.cleanup();
+		MCar.cleanup();
 		// M4.cleanup();
 		for (Model<Vertex> &MTiles: MTiles){
 			MTiles.cleanup();
@@ -415,10 +448,12 @@ protected:
 		// Cleanup descriptor set layouts
 		DSL.cleanup();
 		DSLBlinn.cleanup();
+		DSLCookTorrance.cleanup();
 
 		// Destroys the pipelines
 		P.destroy();
 		PBlinn.destroy();
+		PCookTorrance.destroy();
 	}
 
 	// Here it is the creation of the command buffer:
@@ -442,34 +477,41 @@ protected:
 		// of the current image in the swap chain, passed in its last parameter
 
 		// binds the model
-		M1.bind(commandBuffer);
 		// For a Model object, this command binds the corresponding index and vertex buffer
 		// to the command buffer passed in its parameter
 
 		// record the drawing command in the command buffer
-		vkCmdDrawIndexed(commandBuffer,
-						 static_cast<uint32_t>(M1.indices.size()), 1, 0, 0, 0);
 		// the second parameter is the number of indexes to be drawn. For a Model object,
 		// this can be retrieved with the .indices.size() method.
 
-		DS2.bind(commandBuffer, P, 0, currentImage);
-		M2.bind(commandBuffer);
+		// ----------BlinnPhong Pipeline----------
+		PBlinn.bind(commandBuffer);
+		MCar.bind(commandBuffer);
+		DS2.bind(commandBuffer, PBlinn, 0, currentImage);
 		vkCmdDrawIndexed(commandBuffer,
-						 static_cast<uint32_t>(M2.indices.size()), 1, 0, 0, 0);
-		DS3.bind(commandBuffer, P, 0, currentImage);
-		M3.bind(commandBuffer);
-		vkCmdDrawIndexed(commandBuffer,
-						 static_cast<uint32_t>(M3.indices.size()), 1, 0, 0, 0);
-		// DS4.bind(commandBuffer, P, 0, currentImage);
-		//  M4.bind(commandBuffer);
-		//  vkCmdDrawIndexed(commandBuffer,
-		//  		static_cast<uint32_t>(M4.indices.size()), 1, 0, 0, 0);
+						 static_cast<uint32_t>(MCar.indices.size()), 1, 0, 0, 0);
 		
+
+		// Bind Dataset, Model and record drawing command in command buffer
+		for (int i = 0; i < NUM_OF_TILES / 2; i++) {
+			// Ocean
+			MOcean[i].bind(commandBuffer);
+			DSOcean[i].bind(commandBuffer, PBlinn, 0, currentImage);
+			vkCmdDrawIndexed(commandBuffer,
+								static_cast<uint32_t>(MOcean[i].indices.size()), 1, 0, 0, 0);
+			// Sand
+			MSand[i].bind(commandBuffer);
+			DSSand[i].bind(commandBuffer, PBlinn, 0, currentImage);
+			vkCmdDrawIndexed(commandBuffer,
+												static_cast<uint32_t>(MSand[i].indices.size()), 1, 0, 0, 0);
+		}
+
+
 		// Bind Dataset, Model and record drawing command in command buffer
 		for (int i = 0; i < NUM_OF_TILES; i++){
 			// Obstacles
 			MObstacles[i].bind(commandBuffer);
-			DSObstacles[i].bind(commandBuffer, P, 0, currentImage);
+			DSObstacles[i].bind(commandBuffer, PBlinn, 0, currentImage);
 			vkCmdDrawIndexed(commandBuffer,
 						 static_cast<uint32_t>(MObstacles[i].indices.size()), 1, 0, 0, 0);
 
@@ -479,34 +521,21 @@ protected:
 		for (int i = 0; i < NUM_OF_TILES * 2; i++) {
 			// Beachtiles
 			MBeach[i].bind(commandBuffer);
-			DSBeach[i].bind(commandBuffer, P, 0, currentImage);
+			DSBeach[i].bind(commandBuffer, PBlinn, 0, currentImage);
 			vkCmdDrawIndexed(commandBuffer,
 						static_cast<uint32_t>(MBeach[i].indices.size()), 1, 0, 0, 0);
 		}
 
-		// Bind Dataset, Model and record drawing command in command buffer
-		for (int i = 0; i < NUM_OF_TILES / 2; i++) {
-			// Ocean
-			MOcean[i].bind(commandBuffer);
-			DSOcean[i].bind(commandBuffer, P, 0, currentImage);
-			vkCmdDrawIndexed(commandBuffer,
-								static_cast<uint32_t>(MOcean[i].indices.size()), 1, 0, 0, 0);
-			// Sand
-			MSand[i].bind(commandBuffer);
-			DSSand[i].bind(commandBuffer, P, 0, currentImage);
-			vkCmdDrawIndexed(commandBuffer,
-												static_cast<uint32_t>(MSand[i].indices.size()), 1, 0, 0, 0);
-		}
-
-		PBlinn.bind(commandBuffer);
-		for (int i = 0; i < NUM_OF_TILES; i++)
-		{
+		// ----------CookTorrance Pipeline----------
+		PCookTorrance.bind(commandBuffer);
+		for (int i = 0; i < NUM_OF_TILES; i++){
 			// Roadtiles
 			MTiles[i].bind(commandBuffer);
-			DSTiles[i].bind(commandBuffer, PBlinn, 0, currentImage);
+			DSTiles[i].bind(commandBuffer, PCookTorrance, 0, currentImage);
 			vkCmdDrawIndexed(commandBuffer,
 							 static_cast<uint32_t>(MTiles[i].indices.size()), 1, 0, 0, 0);
 		}
+
 	}
 	// Here is where you update the uniforms.
 	// Very likely this will be where you will be writing the logic of your application.
@@ -547,7 +576,7 @@ protected:
 		// glm::vec3 camPos = camTarget + glm::vec3(0, 50, -80) / 2.0f; //debugging cam
 
 		// Init Gubo
-		gubo.lightColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
+		gubo.lightColor = glm::vec4(0.82f, 0.2f, 0.48f , 1.0f);
 		gubo.lightDir = glm::normalize(glm::vec3(2.0f, 3.0f, -3.0f));
 		gubo.eyePos = camPos;
 		
@@ -557,8 +586,8 @@ protected:
 
 
 		// Controls
-		// car.pos.z += glm::abs(m.z) * 0.8f; // allow only forward movement UNCOMMENT WHEN COLLISION DETECTION IS IMPLEMENTED
-		car.pos.z += m.z * 70.0f * deltaT; // until COLLISION DETECTION is implemented we allow backwards driving for testing 
+		car.pos.z += glm::abs(m.z) * 0.8f; // allow only forward movement UNCOMMENT WHEN COLLISION DETECTION IS IMPLEMENTED
+		// car.pos.z += m.z * 70.0f * deltaT; // until COLLISION DETECTION is implemented we allow backwards driving for testing 
 		car.pos.x += (int)m.x * 20.0f * deltaT;
 		car.pos.x = glm::clamp(car.pos.x, -4.0f, 4.0f); // keep the car on the road
 
@@ -585,14 +614,6 @@ protected:
 				glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0, 1, 0));
 			ubo.mvpMat = Prj * View * ubo.mMat;
 			ubo.nMat = glm::inverse(glm::transpose(ubo.mMat));
-			// for (int i = 0; i < 4; ++i) {
-			// 		for (int j = 0; j < 4; ++j) {
-			// 			std::cout << ubo.nMat[i][j] << ' ';
-			// 		}
-			// 		std::cout << '\n';
-			// 	}			
-			// ubo3.mvpMat = Prj * View * World_Tiles[i];
-			// ubo is used for the street 
 			DSTiles[i].map(currentImage, &ubo, sizeof(ubo), 0);
 			DSTiles[i].map(currentImage, &gubo, sizeof(gubo), 2); 
 		}
