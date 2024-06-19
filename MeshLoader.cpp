@@ -6,7 +6,7 @@
 
 // The uniform buffer objects data structures
 // Remember to use the correct alignas(...) value
-//        float : alignas(4)
+//        float : alignas(4)g
 //        vec2  : alignas(8)
 //        vec3  : alignas(16)
 //        vec4  : alignas(16)
@@ -58,6 +58,11 @@ struct Tile
 struct Obstacle {
 	glm::vec3 pos;
 };
+
+int camLoader = 0;
+glm::vec3 camTarget;
+glm::vec3 camPos;
+int prevFire;
 
 // MAIN !
 class MeshLoader : public BaseProject
@@ -562,7 +567,13 @@ protected:
 		// If fills the last boolean variable with true if fire has been pressed:
 		//          SPACE on the keyboard, A or B button on the Gamepad, Right mouse button
 
+		// Controls
+		car.pos.z += glm::abs(m.z) * 0.8f; // allow only forward movement UNCOMMENT WHEN COLLISION DETECTION IS IMPLEMENTED
+		// car.pos.z += m.z * 70.0f * deltaT; // until COLLISION DETECTION is implemented we allow backwards driving for testing 
+		car.pos.x += (int)m.x * 20.0f * deltaT;
+		car.pos.x = glm::clamp(car.pos.x, -4.0f, 4.0f); // keep the car on the road
 
+		// Camera
 		// Setup camera and matrices for model view projection matrix 
 		// Camera FOV-y, Near Plane and Far Plane
 		const float FOVy = glm::radians(60.0f);
@@ -571,25 +582,55 @@ protected:
 
 		glm::mat4 Prj = glm::perspective(FOVy, Ar, nearPlane, farPlane);
 		Prj[1][1] *= -1;
-		glm::vec3 camTarget = glm::vec3(0, 0, car.pos.z);
-		glm::vec3 camPos = camTarget + glm::vec3(0, 5, -20) / 2.0f; 
+
+		// Change cameras when fire is pressed (between 0, 1 and 2)
+		if (fire) {
+			static int cam = 0;
+			cam = (cam + 1) % 3;
+		}
+
+		// Change cameras when fire is pressed (between 0, 1 and 2)
+		// just change when fire was pressed and it gets released
+		if (fire) {
+			prevFire = fire;
+		}
+
+		if (!fire && prevFire) {
+			camLoader = (camLoader + 1) % 3;
+			prevFire = fire;
+		}
+		
+		//Create case for each camera
+		switch (camLoader) {
+			case 0:
+				// Original cam (camera 0)
+				camTarget = glm::vec3(0, 0, car.pos.z);
+				camPos = camTarget + glm::vec3(0, 5, -20) / 2.0f;
+				break;
+
+			case 1:
+				//First person cam (camera 1)
+				camTarget = glm::vec3(-car.pos.x, 1, car.pos.z + 1);
+				camPos = camTarget + glm::vec3(0, 0.5, -2.3f) / 2.0f;
+				break;
+
+			case 2:
+				//Top down cam (camera 2)
+				camTarget = glm::vec3(0, 0, car.pos.z + 10);
+				camPos = camTarget + glm::vec3(0, 70, -10) / 2.0f;
+				break;
+		}
+
 		// glm::vec3 camPos = camTarget + glm::vec3(0, 50, -80) / 2.0f; //debugging cam
 
 		// Init Gubo
-		gubo.lightColor = glm::vec4(0.82f, 0.2f, 0.48f , 1.0f);
+		gubo.lightColor = glm::vec4(0.82f, 0.2f, 0.48f, 1.0f);
 		gubo.lightDir = glm::normalize(glm::vec3(2.0f, 3.0f, -3.0f));
 		gubo.eyePos = camPos;
-		
+
 
 		glm::mat4 View = glm::lookAt(camPos, camTarget, glm::vec3(0, 1, 0));
 		glm::mat4 World;
-
-
-		// Controls
-		car.pos.z += glm::abs(m.z) * 0.8f; // allow only forward movement UNCOMMENT WHEN COLLISION DETECTION IS IMPLEMENTED
-		// car.pos.z += m.z * 70.0f * deltaT; // until COLLISION DETECTION is implemented we allow backwards driving for testing 
-		car.pos.x += (int)m.x * 20.0f * deltaT;
-		car.pos.x = glm::clamp(car.pos.x, -4.0f, 4.0f); // keep the car on the road
 
 		// translate car movement
 		World = glm::translate(glm::mat4(1), glm::vec3(-car.pos.x, 0, car.pos.z));
@@ -605,7 +646,7 @@ protected:
 		// TILE SIZE 16 x 16
 		glm::mat4 World_Tiles [NUM_OF_TILES];
 		for (int i = 0; i < NUM_OF_TILES ; i++){
-			if (tile[i].pos.z + 16 < car.pos.z) {
+			if (tile[i].pos.z + 32 < car.pos.z) {
 				tile[i].pos.z = tile[i].pos.z + (NUM_OF_TILES) * 16;
 			} 
 			World_Tiles[i] = glm::translate(glm::mat4(1), glm::vec3(0, 0, tile[i].pos.z)) *
@@ -621,7 +662,7 @@ protected:
 		// Beach (8 x 8)
         glm::mat4 World_Beach[NUM_OF_TILES * 2];
 		for (int i = 0; i < NUM_OF_TILES * 2; i++) {
-			if (beach[i].pos.z + 8 < car.pos.z) {
+			if (beach[i].pos.z + 16 < car.pos.z) {
 				beach[i].pos.z = beach[i].pos.z + (NUM_OF_TILES * 2) * 8;
 			}
 			World_Beach[i] = glm::translate(glm::mat4(1), glm::vec3(12, 0, beach[i].pos.z)) *
@@ -646,16 +687,16 @@ protected:
 		// Ocean and sand generation
 		glm::mat4 World_Sides[NUM_OF_TILES/2];
 		for (int i = 0; i < NUM_OF_TILES/2; i++) {
-			if (sides[i].pos.z + 64 < car.pos.z) {
+			if (sides[i].pos.z + 128 < car.pos.z) {
 				sides[i].pos.z = sides[i].pos.z + (NUM_OF_TILES/4) * 64;
 			}
 			//Ocean
-			World_Sides[i] = glm::translate(glm::mat4(1), glm::vec3(42.0f, -1.0f, sides[i].pos.z));
+			World_Sides[i] = glm::translate(glm::mat4(1), glm::vec3(38.0f, -1.0f, sides[i].pos.z));
 			ubo1.mvpMat = Prj * View * World_Sides[i];
 			DSOcean[i].map(currentImage, &ubo1, sizeof(ubo1), 0);
 
 			//Sand
-			World_Sides[i] = glm::translate(glm::mat4(1), glm::vec3(-42.0f, -1.0f, sides[i].pos.z)) *
+			World_Sides[i] = glm::translate(glm::mat4(1), glm::vec3(-38.0f, -1.0f, sides[i].pos.z)) *
 							glm::rotate(glm::mat4(1.0f), glm::radians(180.0f), glm::vec3(0, 1, 0));;
 			ubo3.mvpMat = Prj * View * World_Sides[i];
 			DSSand[i].map(currentImage, &ubo3, sizeof(ubo3), 0);
