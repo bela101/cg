@@ -704,11 +704,11 @@ protected:
 
 		// Collision against obstacles detection
 		for (int i = 0; i < NUM_OF_TILES; i++) {
-			if (car.pos.z < obstacle[i].pos.z + 2.0f && car.pos.z > obstacle[i].pos.z - 2.0f) {
+			if (car.pos.z < obstacle[i].pos.z + 2.0f && car.pos.z > obstacle[i].pos.z - 2.4f) {
 				if (car.pos.x < -obstacle[i].pos.x + 1.5f && car.pos.x > -obstacle[i].pos.x - 1.5f) {
 					std::cout << "Collision detected" << std::endl;
 					//block the car 
-					car.pos.z = glm::clamp(car.pos.z, 0.0f, obstacle[i].pos.z-2.1f);
+					car.pos.z = glm::clamp(car.pos.z, 0.0f, obstacle[i].pos.z-2.4f);
 					
 				}
 			}
