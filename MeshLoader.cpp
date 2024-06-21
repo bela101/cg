@@ -103,6 +103,7 @@ protected:
 	Model<Vertex> MOcean[NUM_OF_TILES/2];
 	Model<Vertex> MSand[NUM_OF_TILES/2];
 	Model<Vertex> MCar;
+	Model<Vertex> MSkybox;
 
 	// Descriptor sets
 	DescriptorSet DS1, DS2, DS3; // DS4;
@@ -111,12 +112,14 @@ protected:
 	DescriptorSet DSObstacles[NUM_OF_TILES];
 	DescriptorSet DSOcean[NUM_OF_TILES/2];
 	DescriptorSet DSSand[NUM_OF_TILES/2];
+	DescriptorSet DSSkybox;
 
 	// Textures
 	Texture /*T1,*/ T2;
 	Texture TDungeon;
 	Texture TOcean;
 	Texture TSand;
+	Texture TSkybox;
 
 	// C++ storage for uniform variables
 	UniformBlock ubo1, ubo2, ubo3; // ubo4;
@@ -272,12 +275,12 @@ protected:
 			MSand[i].vertices.push_back({ surface, normal, UV });
 
 			surface = glm::vec3({ sides_size * 3, 0.0f, -sides_size });
-			UV = glm::vec2({ 1.0f, 1.0f });
+			UV = glm::vec2({ 1.0f, 0.0f });
 			MOcean[i].vertices.push_back({ surface, normal, UV });
 			MSand[i].vertices.push_back({ surface, normal, UV });
 
 			surface = glm::vec3({ sides_size * 3, 0.0f, sides_size });
-			UV = glm::vec2({ 1.0f, 0.0f });
+			UV = glm::vec2({ 1.0f, 1.0f });
 			MOcean[i].vertices.push_back({ surface, normal, UV });
 			MSand[i].vertices.push_back({ surface, normal, UV });
 
@@ -287,11 +290,33 @@ protected:
 			MSand[i].initMesh(this, &VDBlinn);
 		}
 
+		//Create the skybox
+		glm::vec3 surface = glm::vec3({ -sides_size*2, 0.0f, -sides_size });
+		glm::vec3 normal = glm::vec3({ 0.0f, 1.0f, 0.0f });
+		glm::vec2 UV = glm::vec2({ 0.0f, 0.0f });
+		MSkybox.vertices.push_back({ surface, normal, UV });
+
+		surface = glm::vec3({ -sides_size*2, 0.0f, sides_size });
+		UV = glm::vec2({ 0.0f, 1.0f });
+		MSkybox.vertices.push_back({ surface, normal, UV });
+
+		surface = glm::vec3({ sides_size * 2, 0.0f, -sides_size });
+		UV = glm::vec2({ 1.0f, 0.0f });
+		MSkybox.vertices.push_back({ surface, normal, UV });
+
+		surface = glm::vec3({ sides_size * 2, 0.0f, sides_size });
+		UV = glm::vec2({ 1.0f, 1.0f });
+		MSkybox.vertices.push_back({ surface, normal, UV });
+
+		MSkybox.indices = { 0, 1, 2, 1, 3, 2 };
+		MSkybox.initMesh(this, &VDBlinn);
+
 		// Create the textures
 		T2.init(this, "textures/Textures_City.png");
 		TDungeon.init(this, "textures/Textures_Dungeon.png");
 		TOcean.init(this, "textures/water.jpg");
 		TSand.init(this, "textures/sand.jpg");
+		TSkybox.init(this, "textures/day_skybox.jpg");
 
 		// Init local variables
 
@@ -383,6 +408,12 @@ protected:
 				{2, UNIFORM, sizeof(GlobalUniformBufferObject), nullptr} 
 			});
 		}
+
+		DSSkybox.init(this, &DSLBlinn, {
+			{0, UNIFORM, sizeof(UniformBlock), nullptr},
+			{1, TEXTURE, 0, &TSkybox},
+			{2, UNIFORM, sizeof(GlobalUniformBufferObject), nullptr}
+		});
 	}
 
 	// Here you destroy your pipelines and Descriptor Sets!
@@ -398,6 +429,8 @@ protected:
 		DS1.cleanup();
 		DS2.cleanup();
 		DS3.cleanup();
+		DSSkybox.cleanup();
+
 		// DS4.cleanup();
 
 		for (DescriptorSet &DSTiles: DSTiles) {
@@ -429,9 +462,12 @@ protected:
 		TDungeon.cleanup();
 		TOcean.cleanup();
 		TSand.cleanup();
+		TSkybox.cleanup();
 
 		// Cleanup models
 		MCar.cleanup();
+		MSkybox.cleanup();
+
 		// M4.cleanup();
 		for (Model<Vertex> &MTiles: MTiles){
 			MTiles.cleanup();
@@ -541,6 +577,12 @@ protected:
 							 static_cast<uint32_t>(MTiles[i].indices.size()), 1, 0, 0, 0);
 		}
 
+		// ----------Skybox----------
+		MSkybox.bind(commandBuffer);
+		DSSkybox.bind(commandBuffer, PBlinn, 0, currentImage);
+		vkCmdDrawIndexed(commandBuffer,
+									 static_cast<uint32_t>(MSkybox.indices.size()), 1, 0, 0, 0);
+
 	}
 	// Here is where you update the uniforms.
 	// Very likely this will be where you will be writing the logic of your application.
@@ -616,7 +658,7 @@ protected:
 
 			case 2:
 				//Top down cam (camera 2)
-				camTarget = glm::vec3(0, 0, car.pos.z + 10);
+				camTarget = glm::vec3(0, 0, car.pos.z + 13);
 				camPos = camTarget + glm::vec3(0, 70, -10) / 2.0f;
 				break;
 		}
@@ -646,7 +688,7 @@ protected:
 		// TILE SIZE 16 x 16
 		glm::mat4 World_Tiles [NUM_OF_TILES];
 		for (int i = 0; i < NUM_OF_TILES ; i++){
-			if (tile[i].pos.z + 32 < car.pos.z) {
+			if (tile[i].pos.z + 16 < car.pos.z) {
 				tile[i].pos.z = tile[i].pos.z + (NUM_OF_TILES) * 16;
 			} 
 			World_Tiles[i] = glm::translate(glm::mat4(1), glm::vec3(0, 0, tile[i].pos.z)) *
@@ -687,7 +729,7 @@ protected:
 		// Ocean and sand generation
 		glm::mat4 World_Sides[NUM_OF_TILES/2];
 		for (int i = 0; i < NUM_OF_TILES/2; i++) {
-			if (sides[i].pos.z + 128 < car.pos.z) {
+			if (sides[i].pos.z + 64 < car.pos.z) {
 				sides[i].pos.z = sides[i].pos.z + (NUM_OF_TILES/4) * 64;
 			}
 			//Ocean
@@ -714,10 +756,11 @@ protected:
 			}
 		}
 		 
-		
-		// World = glm::scale(glm::mat4(1), glm::vec3(1.0f)) * glm::translate(glm::mat4(1), glm::vec3(0, 0, 20)) *
-		// 		glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0, 1, 0));
-		// ubo3.mvpMat = Prj * View * World;
+		glm::mat4 World_Skybox;
+		World_Skybox = glm::translate(glm::mat4(1), glm::vec3(0, 35.0f, car.pos.z + 180)) * glm::scale(glm::mat4(1), glm::vec3(2.5f)) * glm::rotate(glm::mat4(1.0f), glm::radians(180.0f), glm::vec3(0, 1, 0)) *
+		 		glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(1, 0, 0));
+		 ubo3.mvpMat = Prj * View * World_Skybox;
+		 DSSkybox.map(currentImage, &ubo3, sizeof(ubo3), 0);
 
 		// DS3.map(currentImage, &ubo3, sizeof(ubo3), 0);
 
