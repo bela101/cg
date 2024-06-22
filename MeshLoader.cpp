@@ -1,6 +1,7 @@
 // This has been adapted from the Vulkan tutorial
 
 #include "Starter.hpp"
+#include "TextMaker.hpp"
 #define RENDER_DISTANCE 40
 #define NUM_OF_TILES 16
 
@@ -58,6 +59,11 @@ struct Tile
 struct Obstacle {
 	glm::vec3 pos;
 };
+struct Scene {
+	int gameState;
+	float startTime;
+	int text;
+};
 
 int camLoader = 0;
 glm::vec3 camTarget;
@@ -70,6 +76,7 @@ class MeshLoader : public BaseProject
 protected:
 	// Current aspect ratio (used by the callback that resized the window
 	float Ar;
+	int initialized = 0;
 	// 
 	Car car;
 	Tile tile[NUM_OF_TILES];
@@ -121,12 +128,17 @@ protected:
 	Texture TSand;
 	Texture TSkybox;
 
+	// Text
+	TextMaker score;
+
 	// C++ storage for uniform variables
 	UniformBlock ubo1, ubo2, ubo3; // ubo4;
 	UniformBufferObject ubo;
 	GlobalUniformBufferObject gubo;
 
 	// Other application parameters
+	std::vector<SingleText> texts = {};
+	Scene scene;
 
 	// Here you set the main application parameters
 	void setWindowParameters()
@@ -335,8 +347,18 @@ protected:
 			sides[i].pos.z = i * 64;
 		}
 
+		scene.gameState = 0;
+		scene.text = 0;
+        texts.push_back({1, {"Infinite Run - Press Space to Start", "", "", ""}, 0, 0});
+        texts.push_back({1, {"Infinite Run", "", "", ""}, 0, 0});
 
-		
+		texts[0].l[1] = (char *)malloc(200);
+		// sprintf((char *)texts[0].l[1], "Pnt: %d",Pcnt);
+		texts[0].l[2] = (char *)malloc(200);
+		// sprintf((char *)texts[0].l[2], "Lin: %d",Lcnt);
+		texts[0].l[3] = (char *)malloc(200);
+		// sprintf((char *)texts[0].l[3], "Tri: %d",Tcnt);
+        score.init(this, &texts);
 	}
 
 	// Here you create your pipelines and Descriptor Sets!
@@ -414,6 +436,8 @@ protected:
 			{1, TEXTURE, 0, &TSkybox},
 			{2, UNIFORM, sizeof(GlobalUniformBufferObject), nullptr}
 		});
+
+		score.pipelinesAndDescriptorSetsInit();
 	}
 
 	// Here you destroy your pipelines and Descriptor Sets!
@@ -448,6 +472,8 @@ protected:
 		for (DescriptorSet &DSSand : DSSand) {
 			DSSand.cleanup();
 		}
+
+		score.pipelinesAndDescriptorSetsCleanup();
 	}
 
 	// Here you destroy all the Models, Texture and Desc. Set Layouts you created!
@@ -495,6 +521,12 @@ protected:
 		P.destroy();
 		PBlinn.destroy();
 		PCookTorrance.destroy();
+
+		score.localCleanup();
+
+		free((char *)texts[0].l[1]);
+		free((char *)texts[0].l[2]);
+		free((char *)texts[0].l[3]);
 	}
 
 	// Here it is the creation of the command buffer:
@@ -583,6 +615,9 @@ protected:
 		vkCmdDrawIndexed(commandBuffer,
 									 static_cast<uint32_t>(MSkybox.indices.size()), 1, 0, 0, 0);
 
+		// ----------Score----------
+		score.populateCommandBuffer(commandBuffer, currentImage, scene.text);
+
 	}
 	// Here is where you update the uniforms.
 	// Very likely this will be where you will be writing the logic of your application.
@@ -609,11 +644,6 @@ protected:
 		// If fills the last boolean variable with true if fire has been pressed:
 		//          SPACE on the keyboard, A or B button on the Gamepad, Right mouse button
 
-		// Controls
-		car.pos.z += glm::abs(m.z) * 0.8f; // allow only forward movement UNCOMMENT WHEN COLLISION DETECTION IS IMPLEMENTED
-		// car.pos.z += m.z * 70.0f * deltaT; // until COLLISION DETECTION is implemented we allow backwards driving for testing 
-		car.pos.x += (int)m.x * 20.0f * deltaT;
-		car.pos.x = glm::clamp(car.pos.x, -4.0f, 4.0f); // keep the car on the road
 
 		// Camera
 		// Setup camera and matrices for model view projection matrix 
@@ -625,22 +655,66 @@ protected:
 		glm::mat4 Prj = glm::perspective(FOVy, Ar, nearPlane, farPlane);
 		Prj[1][1] *= -1;
 
-		// Change cameras when fire is pressed (between 0, 1 and 2)
-		if (fire) {
-			static int cam = 0;
-			cam = (cam + 1) % 3;
+		// ----------GAME STATE----------
+		// gameState 0 -> START -> Press Space to start
+		// gameState 1 -> INGAME -> Collide to return to START
+		if (scene.gameState == 0){
+			if (!initialized){
+				initPositions();
+			}
+			initialized = 1;
+			texts.pop_back();
+			scene.text = 0;
+
+			if (fire) {
+				prevFire = fire;
+			}
+
+			if (!fire && prevFire) {
+				scene.gameState = 1;
+				prevFire = fire;
+			}
+		} else if (scene.gameState == 1) {
+			scene.text = 1;
+			initialized = 0;
+			// Controls
+			car.pos.z += 1 * 50.0f * deltaT; // allow only forward movement UNCOMMENT WHEN COLLISION DETECTION IS IMPLEMENTED
+			// car.pos.z += m.z * 70.0f * deltaT; // until COLLISION DETECTION is implemented we allow backwards driving for testing 
+			car.pos.x += (int)m.x * 20.0f * deltaT;
+			car.pos.x = glm::clamp(car.pos.x, -4.0f, 4.0f); // keep the car on the road
+
+			// Collision against obstacles detection
+			for (int i = 0; i < NUM_OF_TILES; i++) {
+				if (car.pos.z < obstacle[i].pos.z + 2.0f && car.pos.z > obstacle[i].pos.z - 2.4f) {
+					if (car.pos.x < -obstacle[i].pos.x + 1.5f && car.pos.x > -obstacle[i].pos.x - 1.5f) {
+						std::cout << "Collision detected" << std::endl;
+						scene.gameState = 0;
+						//block the car 
+						car.pos.z = glm::clamp(car.pos.z, 0.0f, obstacle[i].pos.z-2.4f);
+						
+					}
+				}
+			}
+
+			// Change cameras when fire is pressed (between 0, 1 and 2)
+			if (fire) {
+				static int cam = 0;
+				cam = (cam + 1) % 3;
+			}
+
+			// Change cameras when fire is pressed (between 0, 1 and 2)
+			// just change when fire was pressed and it gets released
+			if (fire) {
+				prevFire = fire;
+			}
+
+			if (!fire && prevFire) {
+				camLoader = (camLoader + 1) % 3;
+				prevFire = fire;
+			}
 		}
 
-		// Change cameras when fire is pressed (between 0, 1 and 2)
-		// just change when fire was pressed and it gets released
-		if (fire) {
-			prevFire = fire;
-		}
 
-		if (!fire && prevFire) {
-			camLoader = (camLoader + 1) % 3;
-			prevFire = fire;
-		}
 		
 		//Create case for each camera
 		switch (camLoader) {
@@ -744,17 +818,7 @@ protected:
 			DSSand[i].map(currentImage, &ubo3, sizeof(ubo3), 0);
 		}
 
-		// Collision against obstacles detection
-		for (int i = 0; i < NUM_OF_TILES; i++) {
-			if (car.pos.z < obstacle[i].pos.z + 2.0f && car.pos.z > obstacle[i].pos.z - 2.4f) {
-				if (car.pos.x < -obstacle[i].pos.x + 1.5f && car.pos.x > -obstacle[i].pos.x - 1.5f) {
-					std::cout << "Collision detected" << std::endl;
-					//block the car 
-					car.pos.z = glm::clamp(car.pos.z, 0.0f, obstacle[i].pos.z-2.4f);
-					
-				}
-			}
-		}
+
 		 
 		glm::mat4 World_Skybox;
 		World_Skybox = glm::translate(glm::mat4(1), glm::vec3(0, 35.0f, car.pos.z + 180)) * glm::scale(glm::mat4(1), glm::vec3(2.5f)) * glm::rotate(glm::mat4(1.0f), glm::radians(180.0f), glm::vec3(0, 1, 0)) *
@@ -764,6 +828,24 @@ protected:
 
 		// DS3.map(currentImage, &ubo3, sizeof(ubo3), 0);
 
+	}
+
+	void initPositions(){
+		car.pos.z = 0;
+		car.pos.x = 0;
+		for(int i = 0; i < NUM_OF_TILES; i++){
+			tile[i].pos.z = i * 16;
+			obstacle[i].pos.z = i * 16;
+			obstacle[i].pos.x = rand() % 8 - 4;
+		}
+		// Initial Positions of Beachtiles
+		for (int i = 0; i < NUM_OF_TILES * 2; i++) {
+			beach[i].pos.z = i * 8;
+		}
+		// Initial Positions of Ocean and Sand
+		for (int i = 0; i < NUM_OF_TILES / 2; i++) {
+			sides[i].pos.z = i * 64;
+		}
 	}
 };
 
