@@ -1,5 +1,6 @@
 #version 450
 #extension GL_ARB_separate_shader_objects : enable
+#define PI 3.14159265358979323846
 
 layout(location = 0) in vec3 fragPos;
 layout(location = 1) in vec3 fragNorm;
@@ -15,28 +16,46 @@ layout(binding = 2) uniform GlobalUniformBufferObject {
 	vec3 eyePos;
 } gubo;
 
-void main() {
-	// ambient
-	float ambientReflectance = .5;
-	vec3 ambient = texture(texSampler, fragTexCoord).rgb;
-	vec3 ambientColor = ambient * ambientReflectance + 0 * gubo.lightColor.rgb;
+const float roughness = 0.5f;
+const float metallic = 0.2f;
+const float F0 = 0.4f;
 
-	// diffuse
-	float diffuseReflectance = 1.0;
-	vec3 norm = normalize(fragNorm);
-	// vec3 lightDir = normalize(-gubo.lightDir);
-	float diff = clamp(dot(norm, normalize(gubo.eyePos - fragPos)), 0, 1);
-	vec3 diffuseColor = diff * ambient * diffuseReflectance;
+vec3 CookTorrance(vec3 V, vec3 N, vec3 L, vec3 Md){
+    vec3 Ms = vec3(1.0f);
+    float K = 1.0f - metallic;
 
-	// bling specular
-	float magnitude = 20;
-	float specularReflectance = 1.0;
-	vec3 viewDir = normalize(gubo.eyePos - fragPos);
-	vec3 lightDir = normalize(-gubo.lightDir);
-	vec3 halfDir = normalize(viewDir + lightDir);
-	float spec = pow(clamp(dot(halfDir, normalize(fragNorm)), 0, 1), magnitude);
-	vec3 specular = specularReflectance * gubo.lightColor.rgb * spec;
+    vec3 H = normalize(L + V);
 
-	outColor = vec4( ambientColor + diffuseColor + specular, 1.0);
+    float NdotL = max(0.001, dot(N, L));
+    float NdotV = max(0.001, dot(N, V));
+
+    vec3 lambertDiffuse = Md * clamp(NdotL, 0, 1);
+
+    float rho2 = roughness * roughness;
+    float D = rho2 / (PI * pow(pow(clamp(max(0.001, dot(N, H)), 0, 1), 2) * (rho2 - 1) + 1, 2));
+
+    float F = F0 + (1 - F0) * pow(1 - clamp(max(0.001, dot(V, H)), 0, 1), 5);
+
+    float gV = 2 / (1 + sqrt(1 + rho2 * ((1 - pow(NdotV, 2)) / pow(NdotV, 2))));
+    float gL = 2 / (1 + sqrt(1 + rho2 * ((1 - pow(NdotL, 2)) / pow(NdotL, 2))));
+    float G = gV * gL;
+
+    vec3 cookTorranceSpecular = Ms * (D * F * G) / (4 * clamp(NdotV, 0.001, 1));
+
+    // return K*Md*clamp(NdotL, 0, 1);
+    return K*lambertDiffuse + metallic*cookTorranceSpecular;
 }
 
+
+void main() {
+    vec3 normal = normalize(vec3(abs(fragNorm.x), abs(fragNorm.y), fragNorm.z));
+    vec3 viewDir = normalize(gubo.eyePos - fragPos);
+    vec3 lightDir = gubo.lightDir;
+    vec3 albedo = texture(texSampler, fragTexCoord).rgb;
+
+    vec3 cook_torrance = CookTorrance(viewDir, normal, lightDir, albedo);
+
+    // outColor = vec4(albedo * gubo.pointLightColor.rgb * NdotL + gubo.pointLightColor.rgb * Rs, 1);
+    outColor = vec4(cook_torrance , 1);
+    // outColor = vec4(normal, 1);
+}

@@ -599,6 +599,13 @@ protected:
 						static_cast<uint32_t>(MBeach[i].indices.size()), 1, 0, 0, 0);
 		}
 
+		// Skybox
+		MSkybox.bind(commandBuffer);
+		DSSkybox.bind(commandBuffer, PBlinn, 0, currentImage);
+		vkCmdDrawIndexed(commandBuffer,
+									 static_cast<uint32_t>(MSkybox.indices.size()), 1, 0, 0, 0);
+
+
 		// ----------CookTorrance Pipeline----------
 		PCookTorrance.bind(commandBuffer);
 		for (int i = 0; i < NUM_OF_TILES; i++){
@@ -609,11 +616,6 @@ protected:
 							 static_cast<uint32_t>(MTiles[i].indices.size()), 1, 0, 0, 0);
 		}
 
-		// ----------Skybox----------
-		MSkybox.bind(commandBuffer);
-		DSSkybox.bind(commandBuffer, PBlinn, 0, currentImage);
-		vkCmdDrawIndexed(commandBuffer,
-									 static_cast<uint32_t>(MSkybox.indices.size()), 1, 0, 0, 0);
 
 		// ----------Score----------
 		score.populateCommandBuffer(commandBuffer, currentImage, scene.text);
