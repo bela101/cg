@@ -14,11 +14,20 @@ layout(binding = 2) uniform GlobalUniformBufferObject {
 	vec3 lightDir;
 	vec4 lightColor;
 	vec3 eyePos;
+	vec3 spotLightDir;
+	vec3 spotLightPos;
 } gubo;
+
+// layout(binding = 3) uniform spotLightObject {
+// } slo;
 
 const float roughness = 0.5f;
 const float metallic = 0.2f;
 const float F0 = 0.4f;
+const float c_out = 0.85f;
+const float c_in = 0.95f;
+const float beta = 3.0f;
+
 
 vec3 CookTorrance(vec3 V, vec3 N, vec3 L, vec3 Md){
     vec3 Ms = vec3(1.0f);
@@ -53,9 +62,23 @@ void main() {
     vec3 lightDir = gubo.lightDir;
     vec3 albedo = texture(texSampler, fragTexCoord).rgb;
 
+    vec3 posRight = gubo.spotLightPos + vec3(0.5, 0, 0);
+    
+    vec3 diffLeft = vec3(gubo.spotLightPos.x, gubo.spotLightPos.y, gubo.spotLightPos.z) - fragPos;
+    vec3 diffRight = vec3(gubo.spotLightPos.x - 1.0f, gubo.spotLightPos.y, gubo.spotLightPos.z) - fragPos;
+
     vec3 cook_torrance = CookTorrance(viewDir, normal, lightDir, albedo);
 
+    float spotlightLeft = clamp(pow(50.0f / length(diffLeft), beta) * clamp((dot(normalize(diffLeft), normalize(-gubo.spotLightDir)) - c_out) / (c_in - c_out), 0.0f, 1.0f), 0.0f, 1.0f);
+    float spotlightRight = clamp(pow(50.0f / length(diffRight), beta) * clamp((dot(normalize(diffRight), normalize(-gubo.spotLightDir)) - c_out) / (c_in - c_out), 0.0f, 1.0f), 0.0f, 1.0f);
+    // float spotlight_right = clamp(pow(50.0f / length(diffRight), beta) * clamp((dot(normalize(diffRight), normalize(-gubo.spotLightDir)) - c_out) / (c_in - c_out), 0.0f, 1.0f), 0.0f, 1.0f);
+    // vec3 left = spotlight_left * vec3(0.1f);
+    vec3 left = spotlightLeft * vec3(0.05f);
+    vec3 right = spotlightRight * vec3(0.05f);
+
     // outColor = vec4(albedo * gubo.pointLightColor.rgb * NdotL + gubo.pointLightColor.rgb * Rs, 1);
-    outColor = vec4(cook_torrance , 1);
+    outColor = vec4(cook_torrance + left + right , 1);
+    // outColor = vec4(normalize(gubo.spotLightPosLeft), 1);
+    // outColor = vec4(slo.spotLightDir , 1);
     // outColor = vec4(normal, 1);
 }

@@ -18,12 +18,14 @@ struct UniformBlock
 {
 	alignas(16) glm::mat4 mvpMat;
 };
-struct GlobalUniformBlock{
-	alignas(16) glm::vec3 DirectLightColor;
-	alignas(16) glm::vec3 DirectLightPos;
-	alignas(16) glm::vec3 AmbientLightColor;
-	alignas(16) glm::vec3 CameraPos;
-};
+// struct GlobalUniformBlock{
+// 	alignas(16) glm::vec3 DirectLightColor;
+// 	alignas(16) glm::vec3 DirectLightPos;
+// 	alignas(16) glm::vec3 AmbientLightColor;
+// 	alignas(16) glm::vec3 CameraPos;
+// };
+// struct spotLightObject{
+// };
 struct UniformBufferObject
 {
 	alignas(16) glm::mat4 mvpMat;
@@ -35,6 +37,8 @@ struct GlobalUniformBufferObject
 	alignas(16) glm::vec3 lightDir;
 	alignas(16) glm::vec4 lightColor;
 	alignas(16) glm::vec3 eyePos;
+	alignas(16) glm::vec3 spotLightDir;
+	alignas(16) glm::vec3 spotLightPos;
 };
 
 // The vertices data structures
@@ -135,6 +139,7 @@ protected:
 	UniformBlock ubo1, ubo2, ubo3; // ubo4;
 	UniformBufferObject ubo;
 	GlobalUniformBufferObject gubo;
+	// spotLightObject slo;
 
 	// Other application parameters
 	std::vector<SingleText> texts = {};
@@ -183,8 +188,9 @@ protected:
 						});
 
 		DSLCookTorrance.init(this, {{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_ALL_GRAPHICS}, // DSLCookTorrance DS's have two Uniform Buffers
-							 {1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT}, // DSLCookTorrance DS's have one Texture
-							 {2, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_ALL_GRAPHICS},
+									{1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT}, // DSLCookTorrance DS's have one Texture
+									{2, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_ALL_GRAPHICS},
+									// {3, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_ALL_GRAPHICS},
 						});
 
 
@@ -347,6 +353,9 @@ protected:
 			sides[i].pos.z = i * 64;
 		}
 
+		gubo.lightColor = glm::vec4(0.82f, 0.2f, 0.48f, 1.0f);
+		gubo.lightDir = glm::normalize(glm::vec3(2.0f, 3.0f, -3.0f));
+		gubo.spotLightDir = glm::normalize(glm::vec3(0.0f, 0.0f, 1.0f));
 		scene.gameState = 0;
 		scene.text = 0;
         texts.push_back({1, {"Infinite Run - Press Space to Start", "", "", ""}, 0, 0});
@@ -680,8 +689,7 @@ protected:
 			scene.text = 1;
 			initialized = 0;
 			// Controls
-			car.pos.z += 1 * 50.0f * deltaT; // allow only forward movement UNCOMMENT WHEN COLLISION DETECTION IS IMPLEMENTED
-			// car.pos.z += m.z * 70.0f * deltaT; // until COLLISION DETECTION is implemented we allow backwards driving for testing 
+			car.pos.z += 1 * 50.0f * deltaT; // automatic forward movement
 			car.pos.x += (int)m.x * 20.0f * deltaT;
 			car.pos.x = glm::clamp(car.pos.x, -4.0f, 4.0f); // keep the car on the road
 
@@ -741,10 +749,6 @@ protected:
 
 		// glm::vec3 camPos = camTarget + glm::vec3(0, 50, -80) / 2.0f; //debugging cam
 
-		// Init Gubo
-		gubo.lightColor = glm::vec4(0.82f, 0.2f, 0.48f, 1.0f);
-		gubo.lightDir = glm::normalize(glm::vec3(2.0f, 3.0f, -3.0f));
-		gubo.eyePos = camPos;
 
 
 		glm::mat4 View = glm::lookAt(camPos, camTarget, glm::vec3(0, 1, 0));
@@ -759,6 +763,10 @@ protected:
 		// the third parameter is its size
 		// the fourth parameter is the location inside the descriptor set of this uniform block
 
+		// Init Gubo
+		// gubo.lightColor = glm::vec4(0.82f, 0.2f, 0.48f, 1.0f);
+		// gubo.lightDir = glm::normalize(glm::vec3(2.0f, 3.0f, -3.0f));
+		// gubo.spotLightDir = glm::normalize(glm::vec3(0, 0, -1.0f));
 
 		// Road Generation
 		// TILE SIZE 16 x 16
@@ -774,7 +782,12 @@ protected:
 			ubo.mvpMat = Prj * View * ubo.mMat;
 			ubo.nMat = glm::inverse(glm::transpose(ubo.mMat));
 			DSTiles[i].map(currentImage, &ubo, sizeof(ubo), 0);
+			gubo.eyePos = camPos;
+			gubo.spotLightDir = glm::normalize(glm::vec3(0,0,1));
+			gubo.spotLightPos = glm::vec3(-(car.pos.x - 0.5f), car.pos.y, car.pos.z + 1.5f);
+			// gubo.spotLightPosRight = glm::vec3(-(car.pos.x + 1), car.pos.y, car.pos.z);
 			DSTiles[i].map(currentImage, &gubo, sizeof(gubo), 2); 
+			// DSTiles[i].map(currentImage, &slo, sizeof(slo), 3); 
 		}
 
 		// Beach (8 x 8)
