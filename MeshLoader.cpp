@@ -755,10 +755,10 @@ protected:
 			scene.text = 1;
 			initialized = 0;
 			// Controls
-			car.speed += 0.15f;
-			car.speed = glm::clamp(car.speed, 0.0f, 60.0f);
+			car.speed += 4 * deltaT;
+			car.speed = glm::clamp(car.speed, 0.0f, 50.0f);
 			car.pos.z += 1 * car.speed * deltaT; // automatic forward movement
-			car.pos.x += (int)m.x * 20.0f * deltaT;
+			car.pos.x += (int)m.x * 15.0f * deltaT;
 			car.pos.x = glm::clamp(car.pos.x, -4.0f, 4.0f); // keep the car on the road
 
 			// Collision against obstacles detection
