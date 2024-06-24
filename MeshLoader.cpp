@@ -4,6 +4,7 @@
 #include "TextMaker.hpp"
 #define RENDER_DISTANCE 40
 #define NUM_OF_TILES 16
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
 
 // The uniform buffer objects data structures
 // Remember to use the correct alignas(...) value
@@ -115,6 +116,8 @@ protected:
 	Model<Vertex> MSand[NUM_OF_TILES/2];
 	Model<Vertex> MCar;
 	Model<Vertex> MSkybox;
+	Model<Vertex> MSplash1;
+	Model<Vertex> MSplash2;
 
 	// Descriptor sets
 	DescriptorSet DS1, DS2, DS3; // DS4;
@@ -124,6 +127,8 @@ protected:
 	DescriptorSet DSOcean[NUM_OF_TILES/2];
 	DescriptorSet DSSand[NUM_OF_TILES/2];
 	DescriptorSet DSSkybox;
+	DescriptorSet DSSplash1;
+	DescriptorSet DSSplash2;
 
 	// Textures
 	Texture /*T1,*/ T2;
@@ -131,12 +136,14 @@ protected:
 	Texture TOcean;
 	Texture TSand;
 	Texture TSkybox;
+	Texture TSplash1;
+	Texture TSplash2;
 
 	// Text
 	TextMaker score;
 
 	// C++ storage for uniform variables
-	UniformBlock ubo1, ubo2, ubo3; // ubo4;
+	UniformBlock ubo1, ubo2, ubo3, uboSplash1, uboSplash2; // ubo4;
 	UniformBufferObject ubo;
 	GlobalUniformBufferObject gubo;
 	// spotLightObject slo;
@@ -262,6 +269,8 @@ protected:
 		// The last is a constant specifying the file type: currently only OBJ or GLTF
 		// MCar.init(this, &VD, "models/transport_sport_001_transport_sport_001.001.mgcg", MGCG);
 		MCar.init(this, &VDBlinn, "models/transport_sport_001_transport_sport_001.001.mgcg", MGCG);
+		MSplash1.init(this, &VDBlinn, "models/Square.obj", OBJ);
+		MSplash2.init(this, &VDBlinn, "models/Square.obj", OBJ);
 		
 		// init models for tiles and obstacles
 		for (int i = 0; i < NUM_OF_TILES; i++) {
@@ -335,6 +344,8 @@ protected:
 		TOcean.init(this, "textures/water.jpg");
 		TSand.init(this, "textures/sand.jpg");
 		TSkybox.init(this, "textures/day_skybox.jpg");
+		TSplash1.init(this, "textures/splashScreenStart.png");
+		TSplash2.init(this, "textures/splashScreenEnd.png");
 
 		// Init local variables
 
@@ -358,7 +369,7 @@ protected:
 		gubo.spotLightDir = glm::normalize(glm::vec3(0.0f, 0.0f, 1.0f));
 		scene.gameState = 0;
 		scene.text = 0;
-        texts.push_back({1, {"Infinite Run - Press Space to Start", "", "", ""}, 0, 0});
+        //texts.push_back({1, {"Infinite Run - Press Space to Start", "", "", ""}, 0, 0});
         texts.push_back({1, {"Infinite Run", "", "", ""}, 0, 0});
 
 		texts[0].l[1] = (char *)malloc(200);
@@ -446,6 +457,15 @@ protected:
 			{2, UNIFORM, sizeof(GlobalUniformBufferObject), nullptr}
 		});
 
+		DSSplash1.init(this, &DSL, {
+			{0, UNIFORM, sizeof(UniformBlock), nullptr},
+			{1, TEXTURE, 0, &TSplash1}
+		});
+
+		DSSplash2.init(this, &DSL, {
+			{0, UNIFORM, sizeof(UniformBlock), nullptr},
+			{1, TEXTURE, 0, &TSplash2}
+			});
 		score.pipelinesAndDescriptorSetsInit();
 	}
 
@@ -463,6 +483,8 @@ protected:
 		DS2.cleanup();
 		DS3.cleanup();
 		DSSkybox.cleanup();
+		DSSplash1.cleanup();
+		DSSplash2.cleanup();
 
 		// DS4.cleanup();
 
@@ -498,10 +520,14 @@ protected:
 		TOcean.cleanup();
 		TSand.cleanup();
 		TSkybox.cleanup();
+		TSplash1.cleanup();
+		TSplash2.cleanup();
 
 		// Cleanup models
 		MCar.cleanup();
 		MSkybox.cleanup();
+		MSplash1.cleanup();
+		MSplash2.cleanup();
 
 		// M4.cleanup();
 		for (Model<Vertex> &MTiles: MTiles){
@@ -548,6 +574,17 @@ protected:
 		// binds the pipeline
 		// For a pipeline object, this command binds the corresponding pipeline to the command buffer passed in its parameter
 		P.bind(commandBuffer);
+
+		// binds the model
+		MSplash1.bind(commandBuffer);
+		DSSplash1.bind(commandBuffer, P, 0, currentImage);
+		vkCmdDrawIndexed(commandBuffer,
+									 static_cast<uint32_t>(MSplash1.indices.size()), 1, 0, 0, 0);
+
+		MSplash2.bind(commandBuffer);
+		DSSplash2.bind(commandBuffer, P, 0, currentImage);
+		vkCmdDrawIndexed(commandBuffer,
+									static_cast<uint32_t>(MSplash2.indices.size()), 1, 0, 0, 0);
 
 		// binds the data set
 		DS1.bind(commandBuffer, P, 0, currentImage);
@@ -656,15 +693,6 @@ protected:
 		//          SPACE on the keyboard, A or B button on the Gamepad, Right mouse button
 
 
-		// Camera
-		// Setup camera and matrices for model view projection matrix 
-		// Camera FOV-y, Near Plane and Far Plane
-		const float FOVy = glm::radians(60.0f);
-		const float nearPlane = 0.1f;
-		const float farPlane = 200.0f;
-
-		glm::mat4 Prj = glm::perspective(FOVy, Ar, nearPlane, farPlane);
-		Prj[1][1] *= -1;
 
 		// ----------GAME STATE----------
 		// gameState 0 -> START -> Press Space to start
@@ -673,8 +701,23 @@ protected:
 			if (!initialized){
 				initPositions();
 			}
+
+			// Camera
+			//Orthogonal projectiion for the splash
+			glm::mat4 Port = glm::scale(glm::mat4(1.0f), glm::vec3(1, -1, 1)) * glm::ortho(-Ar, Ar, -1.0f, 1.0f, 0.1f, 100.0f);
+			glm::mat4 View = glm::lookAt(glm::vec3(0, 0, 1), glm::vec3(0, 0, 0), glm::vec3(0, 1, 0));
+			glm::mat4 World = glm::scale(glm::mat4(1.0f), glm::vec3(1.35f, 1.0f, 1.0f)) *
+							glm::rotate(glm::mat4(1.0f), glm::radians(-90.0f), glm::vec3(0, 1, 0)) *
+	 						glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(1, 0, 0));
+			uboSplash1.mvpMat = Port * View * World;
+			DSSplash1.map(currentImage, &uboSplash1, sizeof(uboSplash1), 0);
+
+			World = glm::scale(glm::mat4(1.0f), glm::vec3(0.0f)) * World;
+			uboSplash2.mvpMat = Port * View * World;
+			DSSplash2.map(currentImage, &uboSplash2, sizeof(uboSplash2), 0);
+
 			initialized = 1;
-			texts.pop_back();
+			//texts.pop_back();
 			scene.text = 0;
 
 			if (fire) {
@@ -685,11 +728,36 @@ protected:
 				scene.gameState = 1;
 				prevFire = fire;
 			}
-		} else if (scene.gameState == 1) {
+		}
+		else if (scene.gameState == 1) {
+
+
+			// Camera
+			// Setup camera and matrices for model view projection matrix 
+			// Camera FOV-y, Near Plane and Far Plane
+			const float FOVy = glm::radians(60.0f);
+			const float nearPlane = 0.1f;
+			const float farPlane = 200.0f;
+
+			glm::mat4 Port = glm::scale(glm::mat4(1.0f), glm::vec3(1, -1, 1)) * glm::ortho(-Ar, Ar, -1.0f, 1.0f, 0.1f, 100.0f);
+			glm::mat4 View = glm::lookAt(glm::vec3(0, 0, 1), glm::vec3(0, 0, 0), glm::vec3(0, 1, 0));
+			glm::mat4 World = glm::scale(glm::mat4(1.0f), glm::vec3(1.35f, 1.0f, 1.0f)) *
+				glm::rotate(glm::mat4(1.0f), glm::radians(-90.0f), glm::vec3(0, 1, 0)) *
+				glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(1, 0, 0));
+
+			World = glm::scale(glm::mat4(1.0f), glm::vec3(0.0f)) * World;
+			uboSplash1.mvpMat = Port * View * World;
+			DSSplash1.map(currentImage, &uboSplash1, sizeof(uboSplash1), 0);
+
+			glm::mat4 Prj = glm::perspective(FOVy, Ar, nearPlane, farPlane);
+			Prj[1][1] *= -1;
+
 			scene.text = 1;
 			initialized = 0;
 			// Controls
-			car.pos.z += 1 * 50.0f * deltaT; // automatic forward movement
+			car.speed += 0.15f;
+			car.speed = glm::clamp(car.speed, 0.0f, 60.0f);
+			car.pos.z += 1 * car.speed * deltaT; // automatic forward movement
 			car.pos.x += (int)m.x * 20.0f * deltaT;
 			car.pos.x = glm::clamp(car.pos.x, -4.0f, 4.0f); // keep the car on the road
 
@@ -698,10 +766,10 @@ protected:
 				if (car.pos.z < obstacle[i].pos.z + 2.0f && car.pos.z > obstacle[i].pos.z - 2.4f) {
 					if (car.pos.x < -obstacle[i].pos.x + 1.5f && car.pos.x > -obstacle[i].pos.x - 1.5f) {
 						std::cout << "Collision detected" << std::endl;
-						scene.gameState = 0;
+						scene.gameState = 2;
 						//block the car 
-						car.pos.z = glm::clamp(car.pos.z, 0.0f, obstacle[i].pos.z-2.4f);
-						
+						car.pos.z = glm::clamp(car.pos.z, 0.0f, obstacle[i].pos.z - 2.4f);
+
 					}
 				}
 			}
@@ -722,12 +790,9 @@ protected:
 				camLoader = (camLoader + 1) % 3;
 				prevFire = fire;
 			}
-		}
 
-
-		
-		//Create case for each camera
-		switch (camLoader) {
+			//Create case for each camera
+			switch (camLoader) {
 			case 0:
 				// Original cam (camera 0)
 				camTarget = glm::vec3(0, 0, car.pos.z);
@@ -745,109 +810,135 @@ protected:
 				camTarget = glm::vec3(0, 0, car.pos.z + 13);
 				camPos = camTarget + glm::vec3(0, 70, -10) / 2.0f;
 				break;
-		}
-
-		// glm::vec3 camPos = camTarget + glm::vec3(0, 50, -80) / 2.0f; //debugging cam
-
-
-
-		glm::mat4 View = glm::lookAt(camPos, camTarget, glm::vec3(0, 1, 0));
-		glm::mat4 World;
-
-		// translate car movement
-		World = glm::translate(glm::mat4(1), glm::vec3(-car.pos.x, 0, car.pos.z));
-		ubo2.mvpMat = Prj * View * World;
-		DS2.map(currentImage, &ubo2, sizeof(ubo2), 0);
-		// the .map() method of a DataSet object, requires the current image of the swap chain as first parameter
-		// the second parameter is the pointer to the C++ data structure to transfer to the GPU
-		// the third parameter is its size
-		// the fourth parameter is the location inside the descriptor set of this uniform block
-
-		// Init Gubo
-		// gubo.lightColor = glm::vec4(0.82f, 0.2f, 0.48f, 1.0f);
-		// gubo.lightDir = glm::normalize(glm::vec3(2.0f, 3.0f, -3.0f));
-		// gubo.spotLightDir = glm::normalize(glm::vec3(0, 0, -1.0f));
-
-		// Road Generation
-		// TILE SIZE 16 x 16
-		glm::mat4 World_Tiles [NUM_OF_TILES];
-		for (int i = 0; i < NUM_OF_TILES ; i++){
-			if (tile[i].pos.z + 16 < car.pos.z) {
-				tile[i].pos.z = tile[i].pos.z + (NUM_OF_TILES) * 16;
-			} 
-			World_Tiles[i] = glm::translate(glm::mat4(1), glm::vec3(0, 0, tile[i].pos.z)) *
-				glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0, 1, 0));
-			ubo.mMat = glm::translate(glm::mat4(1), glm::vec3(0, 0, tile[i].pos.z)) *
-				glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0, 1, 0));
-			ubo.mvpMat = Prj * View * ubo.mMat;
-			ubo.nMat = glm::inverse(glm::transpose(ubo.mMat));
-			DSTiles[i].map(currentImage, &ubo, sizeof(ubo), 0);
-			gubo.eyePos = camPos;
-			gubo.spotLightDir = glm::normalize(glm::vec3(0,0,1));
-			gubo.spotLightPos = glm::vec3(-(car.pos.x - 0.5f), car.pos.y, car.pos.z + 1.5f);
-			// gubo.spotLightPosRight = glm::vec3(-(car.pos.x + 1), car.pos.y, car.pos.z);
-			DSTiles[i].map(currentImage, &gubo, sizeof(gubo), 2); 
-			// DSTiles[i].map(currentImage, &slo, sizeof(slo), 3); 
-		}
-
-		// Beach (8 x 8)
-        glm::mat4 World_Beach[NUM_OF_TILES * 2];
-		for (int i = 0; i < NUM_OF_TILES * 2; i++) {
-			if (beach[i].pos.z + 16 < car.pos.z) {
-				beach[i].pos.z = beach[i].pos.z + (NUM_OF_TILES * 2) * 8;
 			}
-			World_Beach[i] = glm::translate(glm::mat4(1), glm::vec3(12, 0, beach[i].pos.z)) *
-				glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0, 1, 0));
-			ubo1.mvpMat = Prj * View * World_Beach[i];
-			DSBeach[i].map(currentImage, &ubo1, sizeof(ubo1), 0);
-		}
 
-		// Obstacle Generation 
-		glm::mat4 World_Obstacles[NUM_OF_TILES];
-		for (int i = 0; i < NUM_OF_TILES ; i++){
-			if (obstacle[i].pos.z + 16 < car.pos.z) {
-				obstacle[i].pos.z = obstacle[i].pos.z + (NUM_OF_TILES) * 16;
-				obstacle[i].pos.x = rand() % 8 - 4; // random x position
-			} 
-			World_Obstacles[i] = glm::translate(glm::mat4(1), glm::vec3(obstacle[i].pos.x, 0, obstacle[i].pos.z)) *
-				glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0, 1, 0));
-			ubo3.mvpMat = Prj * View * World_Obstacles[i];
-			DSObstacles[i].map(currentImage, &ubo3, sizeof(ubo3), 0);
-		}
+			// glm::vec3 camPos = camTarget + glm::vec3(0, 50, -80) / 2.0f; //debugging cam
 
-		// Ocean and sand generation
-		glm::mat4 World_Sides[NUM_OF_TILES/2];
-		for (int i = 0; i < NUM_OF_TILES/2; i++) {
-			if (sides[i].pos.z + 64 < car.pos.z) {
-				sides[i].pos.z = sides[i].pos.z + (NUM_OF_TILES/4) * 64;
+
+
+			View = glm::lookAt(camPos, camTarget, glm::vec3(0, 1, 0));
+
+			// translate car movement
+			World = glm::translate(glm::mat4(1), glm::vec3(-car.pos.x, 0, car.pos.z));
+			ubo2.mvpMat = Prj * View * World;
+			DS2.map(currentImage, &ubo2, sizeof(ubo2), 0);
+			// the .map() method of a DataSet object, requires the current image of the swap chain as first parameter
+			// the second parameter is the pointer to the C++ data structure to transfer to the GPU
+			// the third parameter is its size
+			// the fourth parameter is the location inside the descriptor set of this uniform block
+
+			// Init Gubo
+			// gubo.lightColor = glm::vec4(0.82f, 0.2f, 0.48f, 1.0f);
+			// gubo.lightDir = glm::normalize(glm::vec3(2.0f, 3.0f, -3.0f));
+			// gubo.spotLightDir = glm::normalize(glm::vec3(0, 0, -1.0f));
+
+			// Road Generation
+			// TILE SIZE 16 x 16
+			glm::mat4 World_Tiles[NUM_OF_TILES];
+			for (int i = 0; i < NUM_OF_TILES; i++) {
+				if (tile[i].pos.z + 16 < car.pos.z) {
+					tile[i].pos.z = tile[i].pos.z + (NUM_OF_TILES) * 16;
+				}
+				World_Tiles[i] = glm::translate(glm::mat4(1), glm::vec3(0, 0, tile[i].pos.z)) *
+					glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0, 1, 0));
+				ubo.mMat = glm::translate(glm::mat4(1), glm::vec3(0, 0, tile[i].pos.z)) *
+					glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0, 1, 0));
+				ubo.mvpMat = Prj * View * ubo.mMat;
+				ubo.nMat = glm::inverse(glm::transpose(ubo.mMat));
+				DSTiles[i].map(currentImage, &ubo, sizeof(ubo), 0);
+				gubo.eyePos = camPos;
+				gubo.spotLightDir = glm::normalize(glm::vec3(0, 0, 1));
+				gubo.spotLightPos = glm::vec3(-(car.pos.x - 0.5f), car.pos.y, car.pos.z + 1.5f);
+				// gubo.spotLightPosRight = glm::vec3(-(car.pos.x + 1), car.pos.y, car.pos.z);
+				DSTiles[i].map(currentImage, &gubo, sizeof(gubo), 2);
+				// DSTiles[i].map(currentImage, &slo, sizeof(slo), 3); 
 			}
-			//Ocean
-			World_Sides[i] = glm::translate(glm::mat4(1), glm::vec3(38.0f, -1.0f, sides[i].pos.z));
-			ubo1.mvpMat = Prj * View * World_Sides[i];
-			DSOcean[i].map(currentImage, &ubo1, sizeof(ubo1), 0);
 
-			//Sand
-			World_Sides[i] = glm::translate(glm::mat4(1), glm::vec3(-38.0f, -1.0f, sides[i].pos.z)) *
-							glm::rotate(glm::mat4(1.0f), glm::radians(180.0f), glm::vec3(0, 1, 0));;
-			ubo3.mvpMat = Prj * View * World_Sides[i];
-			DSSand[i].map(currentImage, &ubo3, sizeof(ubo3), 0);
+			// Beach (8 x 8)
+			glm::mat4 World_Beach[NUM_OF_TILES * 2];
+			for (int i = 0; i < NUM_OF_TILES * 2; i++) {
+				if (beach[i].pos.z + 16 < car.pos.z) {
+					beach[i].pos.z = beach[i].pos.z + (NUM_OF_TILES * 2) * 8;
+				}
+				World_Beach[i] = glm::translate(glm::mat4(1), glm::vec3(12, 0, beach[i].pos.z)) *
+					glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0, 1, 0));
+				ubo1.mvpMat = Prj * View * World_Beach[i];
+				DSBeach[i].map(currentImage, &ubo1, sizeof(ubo1), 0);
+			}
+
+			// Obstacle Generation 
+			glm::mat4 World_Obstacles[NUM_OF_TILES];
+			for (int i = 0; i < NUM_OF_TILES; i++) {
+				if (obstacle[i].pos.z + 16 < car.pos.z) {
+					obstacle[i].pos.z = obstacle[i].pos.z + (NUM_OF_TILES) * 16;
+					obstacle[i].pos.x = rand() % 8 - 4; // random x position
+				}
+				World_Obstacles[i] = glm::translate(glm::mat4(1), glm::vec3(obstacle[i].pos.x, 0, obstacle[i].pos.z)) *
+					glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0, 1, 0));
+				ubo3.mvpMat = Prj * View * World_Obstacles[i];
+				DSObstacles[i].map(currentImage, &ubo3, sizeof(ubo3), 0);
+			}
+
+			// Ocean and sand generation
+			glm::mat4 World_Sides[NUM_OF_TILES / 2];
+			for (int i = 0; i < NUM_OF_TILES / 2; i++) {
+				if (sides[i].pos.z + 64 < car.pos.z) {
+					sides[i].pos.z = sides[i].pos.z + (NUM_OF_TILES / 4) * 64;
+				}
+				//Ocean
+				World_Sides[i] = glm::translate(glm::mat4(1), glm::vec3(38.0f, -1.0f, sides[i].pos.z));
+				ubo1.mvpMat = Prj * View * World_Sides[i];
+				DSOcean[i].map(currentImage, &ubo1, sizeof(ubo1), 0);
+
+				//Sand
+				World_Sides[i] = glm::translate(glm::mat4(1), glm::vec3(-38.0f, -1.0f, sides[i].pos.z)) *
+					glm::rotate(glm::mat4(1.0f), glm::radians(180.0f), glm::vec3(0, 1, 0));;
+				ubo3.mvpMat = Prj * View * World_Sides[i];
+				DSSand[i].map(currentImage, &ubo3, sizeof(ubo3), 0);
+			}
+
+
+
+			glm::mat4 World_Skybox;
+			World_Skybox = glm::translate(glm::mat4(1), glm::vec3(0, 35.0f, car.pos.z + 180)) * glm::scale(glm::mat4(1), glm::vec3(2.5f)) * glm::rotate(glm::mat4(1.0f), glm::radians(180.0f), glm::vec3(0, 1, 0)) *
+				glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(1, 0, 0));
+			ubo3.mvpMat = Prj * View * World_Skybox;
+			DSSkybox.map(currentImage, &ubo3, sizeof(ubo3), 0);
+
+			// DS3.map(currentImage, &ubo3, sizeof(ubo3), 0);
 		}
 
+		if (scene.gameState == 2) {
 
-		 
-		glm::mat4 World_Skybox;
-		World_Skybox = glm::translate(glm::mat4(1), glm::vec3(0, 35.0f, car.pos.z + 180)) * glm::scale(glm::mat4(1), glm::vec3(2.5f)) * glm::rotate(glm::mat4(1.0f), glm::radians(180.0f), glm::vec3(0, 1, 0)) *
-		 		glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(1, 0, 0));
-		 ubo3.mvpMat = Prj * View * World_Skybox;
-		 DSSkybox.map(currentImage, &ubo3, sizeof(ubo3), 0);
+			// Camera
+			//Orthogonal projectiion for the splash
 
-		// DS3.map(currentImage, &ubo3, sizeof(ubo3), 0);
+			glm::mat4 Port = glm::scale(glm::mat4(1.0f), glm::vec3(1, -1, 1)) * glm::ortho(-Ar, Ar, -1.0f, 1.0f, 0.1f, 100.0f);
+			glm::mat4 View = glm::lookAt(glm::vec3(0, 0, 1), glm::vec3(0, 0, 0), glm::vec3(0, 1, 0));
+			glm::mat4 World = glm::scale(glm::mat4(1.0f), glm::vec3(1.35f, 1.0f, 1.0f)) *
+				glm::rotate(glm::mat4(1.0f), glm::radians(-90.0f), glm::vec3(0, 1, 0)) *
+				glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(1, 0, 0));
+			uboSplash2.mvpMat = Port * View * World;
+			DSSplash2.map(currentImage, &uboSplash2, sizeof(uboSplash2), 0);
+
+			scene.text = 0;
+
+			if (fire) {
+				prevFire = fire;
+			}
+
+			if (!fire && prevFire) {
+				scene.gameState = 0;
+				prevFire = fire;
+			}
+		}
 
 	}
 
 	void initPositions(){
 		car.pos.z = 0;
 		car.pos.x = 0;
+		car.speed = 0;
 		for(int i = 0; i < NUM_OF_TILES; i++){
 			tile[i].pos.z = i * 16;
 			obstacle[i].pos.z = i * 16;
